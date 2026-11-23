@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Camera, Loader2, Plus, QrCode, Search } from 'lucide-react'
+import { Camera, Loader2, PackageOpen, Plus, QrCode, Search } from 'lucide-react'
 import { ErrorBox, PageHeader } from '@/shared/kit/Page'
 import CameraScanner, { codeFromScan } from '@/shared/kit/CameraScanner'
 import { clientFetch } from '@/shared/lib/api'
@@ -12,11 +12,12 @@ import { cn } from '@/shared/lib/utils'
 import { BOOKING_STATUS, BookingStatus, type BookingRow } from './bookingShared'
 
 const PAGE_SIZE = 25
-const PK_CODE = /^PK\d+$/i
+/** Mã quét: B<ID>[/kiện] (vận đơn nháp) hoặc số bill 7 số. */
+const SCAN_CODE = /^(B\d+([/_]\d+)?|\d{7})$/i
 
 /**
- * Danh sách lệnh book pickup (ADR-052). Thiết kế cho điện thoại: một ô tìm (mã PK…, tên khách, nhân viên) + chip trạng thái, mỗi lệnh là một thẻ
- * chạm được (không bảng ngang). Chạm thẻ → chi tiết + QR.
+ * Danh sách lệnh pickup (vận đơn nháp CRM). Thiết kế cho điện thoại: một ô quét/tìm + chip trạng thái, mỗi lệnh là một thẻ chạm được.
+ * Quét mã → vào THẲNG màn nhận kiện (?nhan=1). Chạm thẻ → phiếu QR.
  */
 export default function BookingsPage() {
   const router = useRouter()
@@ -31,7 +32,7 @@ export default function BookingsPage() {
   async function openByCode(raw: string) {
     try {
       const b = await clientFetch<{ id: number }>(`/api/pickup-bookings/by-code/${encodeURIComponent(codeFromScan(raw).trim())}`)
-      router.push(`/${b.id}`)
+      router.push(`/${b.id}?nhan=1`)
     } catch (e) {
       setScanError(e instanceof Error ? e.message : 'Không nhận ra mã')
     }
@@ -41,18 +42,24 @@ export default function BookingsPage() {
 
   return (
     <>
-      <PageHeader title="Book pickup" subtitle="Sale/CS book lệnh lấy hàng cho khách — mỗi lệnh có mã và QR để giao nhận cầm, kho quét khi nhận." />
-      <Link href="/new"
-        className="mb-3 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-medium text-white shadow-btn active:bg-primary-dark sm:w-auto sm:px-6">
-        <Plus size={18} /> Book pickup mới
-      </Link>
+      <PageHeader title="Pickup & nhận hàng" subtitle="Book lệnh lấy hàng có QR, hoặc nhận ngay khi khách mang hàng tới kho. Kho quét mã là vào nhận kiện." />
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:flex">
+        <Link href="/new"
+          className="flex h-12 items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-medium text-white shadow-btn active:bg-primary-dark sm:px-6">
+          <Plus size={18} /> Book pickup
+        </Link>
+        <Link href="/new?taiKho=1"
+          className="flex h-12 items-center justify-center gap-2 rounded-lg border border-primary bg-surface text-[15px] font-medium text-primary active:bg-primary-light sm:px-6">
+          <PackageOpen size={18} /> Nhận tại kho
+        </Link>
+      </div>
 
       <div className="mb-2 flex gap-2">
         <div className="relative min-w-0 flex-1">
           <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input value={search} aria-label="Tìm hoặc quét mã pickup" placeholder="Quét/gõ mã PK…, hoặc tìm tên khách" autoComplete="off" enterKeyHint="go"
+          <input value={search} aria-label="Tìm hoặc quét mã pickup" placeholder="Quét/gõ mã B…, số bill, hoặc tên khách" autoComplete="off" enterKeyHint="go"
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-            onKeyDown={(e) => { if (e.key === 'Enter' && PK_CODE.test(search.trim())) { e.preventDefault(); void openByCode(search) } }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && SCAN_CODE.test(search.trim())) { e.preventDefault(); void openByCode(search) } }}
             className="h-12 w-full rounded-lg border border-border bg-surface pl-10 pr-3 text-[16px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
         </div>
         <button type="button" aria-label="Quét QR bằng camera" onClick={() => setCameraOpen(true)}
@@ -72,7 +79,7 @@ export default function BookingsPage() {
       {(error || scanError) && <ErrorBox message={scanError ?? error!.message} />}
       <ul className="space-y-2" aria-busy={isLoading}>
         {isLoading && !data && <li className="flex items-center gap-2 py-4 text-[13px] text-text-muted"><Loader2 className="animate-spin" size={16} /> Đang tải…</li>}
-        {data && data.items.length === 0 && <li className="py-6 text-center text-[13px] text-text-muted">Chưa có lệnh book pickup nào trong 60 ngày qua.</li>}
+        {data && data.items.length === 0 && <li className="py-6 text-center text-[13px] text-text-muted">Chưa có lệnh pickup nào trong 60 ngày qua.</li>}
         {data?.items.map((b) => (
           <li key={b.id}>
             <button type="button" onClick={() => router.push(`/${b.id}`)}
@@ -85,7 +92,8 @@ export default function BookingsPage() {
                 </span>
                 <span className="block truncate text-[14.5px] text-text-primary">{b.customerName ?? '(không tên khách)'}</span>
                 <span className="block truncate text-[12.5px] text-text-muted">
-                  {b.tongSoKien} kiện{b.tongKg ? ` · ${b.tongKg} kg` : ''} · {b.staffName ?? 'NV ' + b.staffId} · {fmtDateTime(b.createDate)}
+                  {b.soKienNhan > 0 ? `${b.soKienNhan}/${b.soKienBook || b.soKienNhan} kiện` : b.soKienBook ? `${b.soKienBook} kiện` : 'Tại kho'}
+                  {b.kg ? ` · ${b.kg} kg` : ''}{b.orderNumber ? ` · bill ${b.orderNumber}` : ''} · {b.staffName || '—'} · {fmtDateTime(b.createDate)}
                 </span>
               </span>
             </button>

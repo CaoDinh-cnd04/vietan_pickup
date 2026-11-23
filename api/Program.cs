@@ -24,12 +24,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
     o.MapInboundClaims = false;   // giữ claim "sub" nguyên tên
 });
 builder.Services.AddAuthorization();
+builder.Services.AddSingleton<KienAi>();
 
 var app = builder.Build();
 app.UseAuthentication();
 app.UseAuthorization();
 Auth.Map(app, key, issuer, app.Services.GetRequiredService<TimeProvider>());
 Bookings.Map(app);
+KienAi.Map(app);
 app.Run();
 
 public partial class Program;
