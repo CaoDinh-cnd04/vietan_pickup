@@ -20,13 +20,18 @@ public sealed class KienAi(IConfiguration cfg, ILogger<KienAi> log)
     public bool Enabled => _key is not null;
 
     private const string Prompt = """
-        Ảnh chụp một kiện hàng tại kho chuyển phát. Hãy điền số đo cho kiện CHÍNH trong ảnh:
-        - trong_luong (kg): CHỈ khi đọc được con số trên màn hình cân điện tử hoặc kim cân trong ảnh. Không đọc được thì null — tuyệt đối không đoán khối lượng.
-        - dai, rong, cao (cm, số nguyên, dài ≥ rộng): nếu có thước dây/thước kẻ hoặc nhãn ghi kích thước thì đọc theo đó (nguon_kich_thuoc = "thuoc");
-          nếu không, ước lượng theo vật tham chiếu quen thuộc trong ảnh (giấy A4, bàn cân, tay người…) (nguon_kich_thuoc = "uoc_luong");
-          không đủ cơ sở thì để null (nguon_kich_thuoc = "khong_ro").
+        Ảnh chụp một kiện hàng tại kho chuyển phát (ảnh có thể bị xoay ngang/ngược — hãy tự xoay để đọc). Điền số đo cho kiện CHÍNH (kiện chiếm phần lớn ảnh, ở giữa):
+        Nhân viên kho thường GHI TAY bằng bút lông lên thùng — ưu tiên đọc các số này:
+        - Kích thước: 3 số cách nhau bởi "/" hoặc "x", theo thứ tự dài/rộng/cao (cm). Vd "32/28/28", "41/27/24", "62/42/42", "40x36x36", "58x50x40".
+          Thường là dòng số đầu tiên, nét to. Đọc được ⇒ nguon_kich_thuoc = "thuoc" và giữ đúng thứ tự đã ghi.
+        - Cân (kg): số thập phân dùng DẤU PHẨY, vd "Cân: 18,52" ⇒ 18.52; hoặc là phần cuối của dòng "tên khách/mã nước/cân" như "P.Anh/AU/19,91" ⇒ 19.91, "P.Anh/AU/22,86" ⇒ 22.86.
+        BỎ QUA: số bill/mã vạch, số điện thoại, địa chỉ, mã bưu chính, ngày tháng, "Total: n pcs", số lượng hàng (vd "25 miến"), chữ in sẵn của nhà sản xuất thùng (vd "26,3 kg" in trên vỏ thùng tái sử dụng), số trên kiện khác phía sau.
+        Quy tắc điền:
+        - trong_luong (kg): CHỈ lấy khi số đó rõ ràng là cân — có chữ "Cân"/"kg" đi kèm, hoặc là số thập phân có dấu phẩy ở cuối dòng "tên/mã nước/số" như trên — hoặc đọc từ màn hình/kim cân trong ảnh.
+          Thùng chỉ có tên khách, nơi đến, ghi chú (vd "C.Quanh/Thảo/EU", "Phú") mà không có số cân ⇒ null. Không chắc ⇒ null — tuyệt đối không đoán khối lượng.
+        - dai, rong, cao (cm, số nguyên): ghi tay/thước/nhãn ⇒ "thuoc"; nếu không có, ước lượng theo vật tham chiếu quen thuộc (giấy A4, gạch lát nền ~60cm, bàn cân, tay người…) ⇒ "uoc_luong" (dài ≥ rộng); không đủ cơ sở ⇒ null và "khong_ro".
         - loai: "CARTON" (thùng cứng) hoặc "TUI" (túi/bao mềm).
-        - ghi_chu: 1 câu tiếng Việt ngắn nói con số lấy từ đâu (vd "Cân đọc từ màn hình 12,4 kg; kích thước ước lượng theo khổ bàn cân").
+        - ghi_chu: 1 câu tiếng Việt ngắn nói con số lấy từ đâu (vd "Kích thước đọc từ chữ ghi tay 32/28/28; cân ghi tay 18,52 kg").
         """;
 
     private static readonly Dictionary<string, JsonElement> Schema = new()
@@ -52,7 +57,7 @@ public sealed class KienAi(IConfiguration cfg, ILogger<KienAi> log)
         var body = new
         {
             contents = new[] { new { parts = new object[] { new { inlineData = new { mimeType = mediaType, data = Convert.ToBase64String(image) } }, new { text = Prompt } } } },
-            generationConfig = new { responseMimeType = "application/json", responseJsonSchema = Schema, thinkingConfig = new { thinkingLevel = "low" } },   // low: kho cần nhanh
+            generationConfig = new { responseMimeType = "application/json", responseJsonSchema = Schema, thinkingConfig = new { thinkingLevel = "medium" } },   // medium: low đọc sai chữ ghi tay xấu (12→42, bỏ sót số)
         };
         using var msg = new HttpRequestMessage(HttpMethod.Post, $"https://generativelanguage.googleapis.com/v1beta/models/{Model}:generateContent")
         {
