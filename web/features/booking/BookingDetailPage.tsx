@@ -55,7 +55,7 @@ export default function BookingDetailPage() {
           <Link href="/" aria-label="Về danh sách" className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-border bg-surface text-text-secondary"><ArrowLeft size={18} /></Link>
           <div className="min-w-0 flex-1">
             <p className="truncate text-[16px] font-semibold text-text-primary">{data.customerName ?? '(không tên khách)'}</p>
-            <p className="truncate text-[12.5px] text-text-muted">{data.code}{data.tenHang ? ` · ${data.tenHang}` : ''}</p>
+            <p className="truncate text-[12.5px] text-text-muted">{data.code}{data.saleName ? ` · NV: ${data.saleName}` : ''}{data.tenHang ? ` · ${data.tenHang}` : ''}</p>
           </div>
           <button type="button" onClick={() => { setReceiving(false); reload() }} className="h-11 shrink-0 rounded-lg px-2 text-[13px] text-primary">Xem phiếu</button>
         </div>
@@ -80,6 +80,7 @@ export default function BookingDetailPage() {
 
         <dl className="mt-4 space-y-2 text-[14px]">
           <Row k="Khách hàng" v={data.customerName} strong />
+          <Row k="NV phụ trách" v={data.saleName || null} />
           <Row k="Người liên hệ" v={contact || null} />
           <Row k="Địa chỉ lấy" v={data.pickupAddress} />
           <Row k="Hẹn giờ" v={data.planDate ? fmtDateTime(data.planDate) : null} />

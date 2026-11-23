@@ -4,13 +4,13 @@ import StatusBadge from '@/shared/kit/StatusBadge'
 export interface BookingRow {
   id: number; code: string; customerId: number | null; customerName: string | null; staffName: string | null
   planDate: string | null; trangThai: number; createDate: string | null; soKienBook: number; soKienNhan: number; kg: number | null
-  tenHang: string | null; orderNumber: number | null
+  tenHang: string | null; orderNumber: number | null; saleName: string
 }
 export interface BookingDetail {
   id: number; code: string; customerId: number | null; customerName: string | null; customerPhone: string | null; staffName: string | null
   contactName: string | null; contactPhone: string | null; pickupAddress: string | null; planDate: string | null; tenHang: string | null; note: string | null
   trangThai: number; createDate: string | null; receivedDate: string | null; soKienBook: number; kgDuKien: number | null; orderNumber: number | null
-  kiens: BookingKien[]
+  kiens: BookingKien[]; saleName: string
 }
 export interface BookingKien {
   kienSo: number; loai: 'CARTON' | 'TUI'; dai: number; rong: number; cao: number; trongLuong: number; quiDoi: number; chargeWeight: number; hasPhoto: boolean

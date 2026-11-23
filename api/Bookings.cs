@@ -7,10 +7,10 @@ public sealed record CreateBookingRequest(long CustomerId, int SoKien = 0, decim
 
 public sealed record KienDto(int KienSo, string Loai, int Dai, int Rong, int Cao, decimal TrongLuong, decimal QuiDoi, decimal ChargeWeight, bool HasPhoto);
 public sealed record RowDto(long Id, string Code, long? CustomerId, string? CustomerName, string StaffName, DateTime? PlanDate, int TrangThai,
-    DateTime? CreateDate, int SoKienBook, int SoKienNhan, decimal? Kg, string? TenHang, long? OrderNumber);
+    DateTime? CreateDate, int SoKienBook, int SoKienNhan, decimal? Kg, string? TenHang, long? OrderNumber, string SaleName);
 public sealed record DetailDto(long Id, string Code, long? CustomerId, string? CustomerName, string? CustomerPhone, string StaffName,
     string? ContactName, string? ContactPhone, string? PickupAddress, DateTime? PlanDate, string? TenHang, string? Note, int TrangThai, DateTime? CreateDate,
-    DateTime? ReceivedDate, int SoKienBook, decimal? KgDuKien, long? OrderNumber, IReadOnlyList<KienDto> Kiens);
+    DateTime? ReceivedDate, int SoKienBook, decimal? KgDuKien, long? OrderNumber, IReadOnlyList<KienDto> Kiens, string SaleName);
 
 /// <summary>
 /// Book pickup + kho nhận hàng trên BẢNG CRM (không bảng riêng):
@@ -91,7 +91,9 @@ public static class Bookings
         var v = await db.VanDons.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
         if (v is null) return Missing();
         var p = await FindPickup(db, id);
-        var c = await db.Customers.AsNoTracking().Where(x => x.CustomerID == v.CustomerId).Select(x => new { x.CustomerName, x.Phone, x.Tel }).FirstOrDefaultAsync(ct);
+        var c = await db.Customers.AsNoTracking().Where(x => x.CustomerID == v.CustomerId).Select(x => new { x.CustomerName, x.Phone, x.Tel, x.StaffId }).FirstOrDefaultAsync(ct);
+        var saleId = v.CustomerStaffId > 0 ? v.CustomerStaffId : c?.StaffId;   // NV phụ trách khách (Customer_Staff_ID thường = 0 ⇒ lấy theo hồ sơ khách)
+        var sale = saleId is { } si ? await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == (int)si, ct) : null;
         var u = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == v.CreateUser, ct);
         var dims = await db.Dims.AsNoTracking().Where(d => d.MaVanDonId == (int)id).OrderBy(d => d.Id).ToListAsync(ct);
         var photos = (await (from h in db.HinhAnhs.AsNoTracking()
@@ -103,7 +105,7 @@ public static class Bookings
         return Results.Ok(new DetailDto(v.Id, Code(v.Id), v.CustomerId, c?.CustomerName ?? v.CustomerName, c?.Phone ?? c?.Tel, Auth.StaffName(u),
             v.SenderContactName, v.SenderPhone, v.SenderAddress, v.PickupEst, v.TenHang, UserNote(id, p?.Note),
             StatusOf(v.OrderNumber, p?.PickDateEnd, dims.Count), p?.PickDate ?? v.CreateDate, p?.PickDateEnd,
-            p?.SoKienBook ?? v.SoKien ?? 0, dims.Count == 0 ? v.TrongLuong : null, v.OrderNumber, kiens));
+            p?.SoKienBook ?? v.SoKien ?? 0, dims.Count == 0 ? v.TrongLuong : null, v.OrderNumber, kiens, Auth.StaffName(sale)));
     }
 
     public static void Map(IEndpointRouteBuilder app)
@@ -170,13 +172,15 @@ public static class Bookings
                           && (@group != "can" || st < 2) && (@group != "xong" || st >= 2)   // nhóm cho kho: cần nhận (0,1) · đã nhận (2,3)
                           && (s == "" || (codeId != null && m.Id == codeId) || (codeOn != null && m.OrderNumber == codeOn) || m.CustomerName!.Contains(s) || m.TenHang!.Contains(s))
                     select new { m.Id, m.CustomerId, m.CustomerName, m.CreateUser, m.PickupEst, m.CreateDate, m.SoKien, m.TrongLuong, m.TenHang, m.OrderNumber,
-                                 PickDate = (DateTime?)pk!.PickDate, SoKienBook = (int?)pk!.SoKienBook, St = st, Dims = dims };
+                                 PickDate = (DateTime?)pk!.PickDate, SoKienBook = (int?)pk!.SoKienBook, St = st, Dims = dims,
+                                 SaleId = m.CustomerStaffId > 0 ? m.CustomerStaffId : db.Customers.Where(c => c.CustomerID == m.CustomerId).Select(c => (long?)c.StaffId).FirstOrDefault() };   // NV phụ trách khách
             var total = await q.CountAsync(ct);
             var rows = await q.OrderByDescending(x => x.Id).Skip((p0 - 1) * size).Take(size).ToListAsync(ct);
-            var uids = rows.Select(x => x.CreateUser).Distinct().ToList();
+            var uids = rows.Select(x => x.CreateUser).Concat(rows.Select(x => (int?)x.SaleId)).Distinct().ToList();
             var users = await db.Users.AsNoTracking().Where(u => uids.Contains(u.Id)).ToDictionaryAsync(u => u.Id, ct);
             var items = rows.Select(x => new RowDto(x.Id, Code(x.Id), x.CustomerId, x.CustomerName, Auth.StaffName(x.CreateUser is { } cu ? users.GetValueOrDefault(cu) : null),
-                x.PickupEst, x.St, x.PickDate ?? x.CreateDate, x.SoKienBook ?? x.SoKien ?? 0, x.Dims, x.TrongLuong, x.TenHang, x.OrderNumber)).ToList();
+                x.PickupEst, x.St, x.PickDate ?? x.CreateDate, x.SoKienBook ?? x.SoKien ?? 0, x.Dims, x.TrongLuong, x.TenHang, x.OrderNumber,
+                Auth.StaffName(x.SaleId is { } si ? users.GetValueOrDefault((int)si) : null))).ToList();
             return Results.Ok(new { items, page = p0, pageSize = size, totalCount = total });
         });
 

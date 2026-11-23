@@ -87,6 +87,7 @@ export default function BookingsPage() {
               className="flex min-h-[72px] w-full items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-left active:bg-primary-light">
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15.5px] font-semibold text-text-primary">{b.customerName ?? '(không tên khách)'}</span>
+                {b.saleName && <span className="block truncate text-[13px] text-text-secondary">NV: {b.saleName}</span>}
                 <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                   <BookingStatus value={b.trangThai} nhan={b.soKienNhan} khai={b.soKienBook} />
                   <span className="text-[12.5px] text-text-muted">
