@@ -6,6 +6,7 @@ import { Card, ErrorBox, PageHeader } from '@/shared/kit/Page'
 import CustomerPicker from '@/shared/kit/CustomerPicker'
 import { Btn, TextAreaField, TextField } from '@/shared/kit/Fields'
 import { useAction } from '@/shared/lib/hooks'
+import { toDecimal } from './bookingShared'
 
 /**
  * Book pickup (sale/CS) hoặc ?taiKho=1: khách tự mang hàng tới kho (bỏ bước pickup). Cả hai tạo vận đơn nháp CRM + mã B<ID>.
@@ -36,7 +37,7 @@ export default function NewBookingPage() {
     setTouched(true)
     if (!valid || busy) return
     const res = await run<{ id: number; code: string }>('POST', '/api/pickup-bookings', taiKho
-      ? { customerId: customer!.id, taiKho: true, tenHang: tenHang.trim() || null, note: note.trim() || null }
+      ? { customerId: customer!.id, taiKho: true }
       : {
           customerId: customer!.id, soKien: n, kgDuKien: kg.trim() === '' ? null : Number(kg), tenHang: tenHang.trim() || null,
           contactName: contactName.trim() || null, contactPhone: contactPhone.trim() || null, pickupAddress: address.trim() || null,
@@ -48,8 +49,8 @@ export default function NewBookingPage() {
   return (
     <div className="mx-auto max-w-xl pb-28">
       <PageHeader
-        title={taiKho ? 'Khách mang hàng tới kho' : 'Book pickup mới'}
-        subtitle={taiKho ? 'Chọn khách rồi cân, đo, chụp từng kiện ngay — không cần book trước.' : 'Chọn khách, số kiện. Lưu xong có mã QR cho giao nhận.'} />
+        title={taiKho ? 'Khách mang hàng tới' : 'Book lấy hàng'}
+        subtitle={taiKho ? 'Chọn khách là vào chụp kiện ngay.' : 'Chọn khách, số kiện. Lưu xong có mã QR cho giao nhận.'} />
 
       <Card className="mb-3">
         <CustomerPicker value={customer} onChange={setCustomer} required />
@@ -58,18 +59,16 @@ export default function NewBookingPage() {
         {!taiKho && (
           <div className="mt-3 grid grid-cols-2 gap-3">
             <TextField label="Số kiện" required value={soKien} inputMode="numeric" onChange={(v) => setSoKien(v.replace(/\D/g, ''))} className="h-11 text-[15px]" />
-            <TextField label="Cân dự kiến (kg)" value={kg} inputMode="decimal" onChange={(v) => setKg(v.replace(/[^\d.]/g, ''))} className="h-11 text-[15px]" />
+            <TextField label="Cân dự kiến (kg)" value={kg} inputMode="decimal" onChange={(v) => setKg(toDecimal(v))} className="h-11 text-[15px]" />
           </div>
         )}
         {touched && !soKienOk && <p className="mt-1 text-[12.5px] text-danger" role="alert">Số kiện từ 1 đến 9999.</p>}
-        <div className="mt-3">
+        {!taiKho && <div className="mt-3">
           <TextField label="Tên hàng" value={tenHang} onChange={setTenHang} placeholder="VD: quần áo, mỹ phẩm…" autoComplete="off" className="h-11 text-[15px]" />
-        </div>
+        </div>}
       </Card>
 
-      {taiKho ? (
-        <Card className="mb-3"><TextAreaField label="Ghi chú" value={note} onChange={setNote} rows={2} /></Card>
-      ) : (
+      {!taiKho && (
         <details className="group mb-3 rounded-lg border border-border bg-surface">
           <summary className="flex h-12 cursor-pointer list-none items-center justify-between px-4 text-[14px] font-medium text-text-secondary">
             Thêm thông tin (liên hệ, địa chỉ, hẹn giờ)
@@ -93,7 +92,7 @@ export default function NewBookingPage() {
         <div className="mx-auto max-w-xl">
           <Btn type="button" className="h-12 w-full text-[15px]" disabled={busy} onClick={save}>
             {busy ? <Loader2 className="animate-spin" size={18} /> : taiKho ? <PackageOpen size={18} /> : <Save size={18} />}
-            {busy ? 'Đang lưu…' : taiKho ? 'Bắt đầu nhận hàng' : 'Lưu & tạo QR'}
+            {busy ? 'Đang lưu…' : taiKho ? 'Bắt đầu chụp kiện' : 'Lưu & tạo QR'}
           </Btn>
         </div>
       </div>

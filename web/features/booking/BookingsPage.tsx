@@ -2,32 +2,37 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Camera, Loader2, PackageOpen, Plus, QrCode, Search } from 'lucide-react'
-import { ErrorBox, PageHeader } from '@/shared/kit/Page'
+import { Camera, ChevronRight, Loader2, PackageOpen, Plus, QrCode, Search, X } from 'lucide-react'
+import { ErrorBox } from '@/shared/kit/Page'
 import CameraScanner, { codeFromScan } from '@/shared/kit/CameraScanner'
 import { clientFetch } from '@/shared/lib/api'
 import { useApi, qs, type Paged } from '@/shared/lib/hooks'
 import { fmtDateTime, todayInput } from '@/shared/lib/format'
 import { cn } from '@/shared/lib/utils'
-import { BOOKING_STATUS, BookingStatus, type BookingRow } from './bookingShared'
+import { BookingStatus, type BookingRow } from './bookingShared'
 
 const PAGE_SIZE = 25
 /** Mã quét: B<ID>[/kiện] (vận đơn nháp) hoặc số bill 7 số. */
 const SCAN_CODE = /^(B\d+([/_]\d+)?|\d{7})$/i
+/** Hai nhóm cho kho (API group): cần nhận = chưa nhận + đang nhận · đã nhận = đã nhận đủ + đã có bill. */
+const TABS = [{ value: 'can', label: 'Cần nhận' }, { value: 'xong', label: 'Đã nhận' }] as const
 
 /**
- * Danh sách lệnh pickup (vận đơn nháp CRM). Thiết kế cho điện thoại: một ô quét/tìm + chip trạng thái, mỗi lệnh là một thẻ chạm được.
- * Quét mã → vào THẲNG màn nhận kiện (?nhan=1). Chạm thẻ → phiếu QR.
+ * Trang chủ cho kho, thiết kế cho điện thoại: MỘT nút chính "Nhận hàng" (quét QR phiếu, hoặc khách mang tới không có phiếu),
+ * danh sách chia 2 tab. Chạm phiếu chưa nhận xong ⇒ vào thẳng màn nhận kiện; phiếu đã xong ⇒ xem phiếu.
  */
 export default function BookingsPage() {
   const router = useRouter()
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState(-1)
+  const [tab, setTab] = useState<(typeof TABS)[number]['value']>('can')
   const [page, setPage] = useState(1)
+  const [sheetOpen, setSheetOpen] = useState(false)
   const [cameraOpen, setCameraOpen] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
+  const term = search.trim()
   const { data, error, isLoading } = useApi<Paged<BookingRow>>(
-    `/api/pickup-bookings${qs({ fromDate: todayInput(-60), toDate: todayInput(), status, search: search.trim(), page, pageSize: PAGE_SIZE })}`,
+    // đang tìm thì tìm trong cả hai nhóm, để gõ mã phiếu đã nhận vẫn ra
+    `/api/pickup-bookings${qs({ fromDate: todayInput(-60), toDate: todayInput(), group: term ? '' : tab, search: term, page, pageSize: PAGE_SIZE })}`,
   )
   async function openByCode(raw: string) {
     try {
@@ -37,65 +42,59 @@ export default function BookingsPage() {
       setScanError(e instanceof Error ? e.message : 'Không nhận ra mã')
     }
   }
-  const chips = [{ value: -1, label: 'Tất cả' }, ...BOOKING_STATUS.map((s) => ({ value: s.value, label: s.label }))]
   const pages = Math.max(1, Math.ceil((data?.totalCount ?? 0) / PAGE_SIZE))
 
   return (
-    <>
-      <PageHeader title="Pickup & nhận hàng" subtitle="Book lệnh lấy hàng có QR, hoặc nhận ngay khi khách mang hàng tới kho. Kho quét mã là vào nhận kiện." />
-      <div className="mb-3 grid grid-cols-2 gap-2 sm:flex">
-        <Link href="/new"
-          className="flex h-12 items-center justify-center gap-2 rounded-lg bg-primary text-[15px] font-medium text-white shadow-btn active:bg-primary-dark sm:px-6">
-          <Plus size={18} /> Book pickup
-        </Link>
-        <Link href="/new?taiKho=1"
-          className="flex h-12 items-center justify-center gap-2 rounded-lg border border-primary bg-surface text-[15px] font-medium text-primary active:bg-primary-light sm:px-6">
-          <PackageOpen size={18} /> Nhận tại kho
-        </Link>
+    <div className="mx-auto max-w-xl">
+      <button type="button" onClick={() => { setScanError(null); setSheetOpen(true) }}
+        className="mb-2 flex h-16 w-full items-center justify-center gap-3 rounded-xl bg-primary text-[18px] font-semibold text-white shadow-btn active:bg-primary-dark">
+        <PackageOpen size={24} aria-hidden /> Nhận hàng
+      </button>
+      <Link href="/new" className="mb-4 flex h-11 items-center justify-center gap-2 rounded-lg border border-border bg-surface text-[14px] font-medium text-text-secondary active:bg-primary-light">
+        <Plus size={18} aria-hidden /> Book lấy hàng (cho sale)
+      </Link>
+
+      <div className="relative mb-3">
+        <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden />
+        <input value={search} aria-label="Tìm phiếu" placeholder="Tìm mã phiếu B…, số bill, tên khách" autoComplete="off" enterKeyHint="go"
+          onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && SCAN_CODE.test(term)) { e.preventDefault(); void openByCode(search) } }}
+          className="h-12 w-full rounded-lg border border-border bg-surface pl-10 pr-3 text-[16px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
       </div>
 
-      <div className="mb-2 flex gap-2">
-        <div className="relative min-w-0 flex-1">
-          <Search size={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input value={search} aria-label="Tìm hoặc quét mã pickup" placeholder="Quét/gõ mã B…, số bill, hoặc tên khách" autoComplete="off" enterKeyHint="go"
-            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-            onKeyDown={(e) => { if (e.key === 'Enter' && SCAN_CODE.test(search.trim())) { e.preventDefault(); void openByCode(search) } }}
-            className="h-12 w-full rounded-lg border border-border bg-surface pl-10 pr-3 text-[16px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+      {!term && (
+        <div className="mb-3 grid grid-cols-2 rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Nhóm phiếu">
+          {TABS.map((t) => (
+            <button key={t.value} type="button" role="tab" aria-selected={tab === t.value} onClick={() => { setTab(t.value); setPage(1) }}
+              className={cn('h-10 rounded-md text-[14.5px] transition-colors', tab === t.value ? 'bg-surface font-semibold text-primary shadow-sm' : 'text-text-secondary')}>
+              {t.label}{tab === t.value && data ? ` (${data.totalCount})` : ''}
+            </button>
+          ))}
         </div>
-        <button type="button" aria-label="Quét QR bằng camera" onClick={() => setCameraOpen(true)}
-          className="grid h-12 w-12 shrink-0 place-items-center rounded-lg border border-border bg-surface text-text-secondary"><Camera size={20} /></button>
-      </div>
-      {cameraOpen && <CameraScanner onClose={() => setCameraOpen(false)} onResult={(c) => { setCameraOpen(false); void openByCode(c) }} />}
-      <div className="mb-3 flex gap-2 overflow-x-auto pb-1" role="radiogroup" aria-label="Lọc trạng thái">
-        {chips.map((c) => (
-          <button key={c.value} type="button" role="radio" aria-checked={status === c.value} onClick={() => { setStatus(c.value); setPage(1) }}
-            className={cn('h-11 shrink-0 rounded-full border px-4 text-[13.5px] transition-colors',
-              status === c.value ? 'border-primary bg-primary-light/60 font-semibold text-primary' : 'border-border bg-surface text-text-secondary')}>
-            {c.label}
-          </button>
-        ))}
-      </div>
+      )}
 
-      {(error || scanError) && <ErrorBox message={scanError ?? error!.message} />}
+      {(error || scanError) && <div className="mb-3"><ErrorBox message={scanError ?? error!.message} /></div>}
       <ul className="space-y-2" aria-busy={isLoading}>
         {isLoading && !data && <li className="flex items-center gap-2 py-4 text-[13px] text-text-muted"><Loader2 className="animate-spin" size={16} /> Đang tải…</li>}
-        {data && data.items.length === 0 && <li className="py-6 text-center text-[13px] text-text-muted">Chưa có lệnh pickup nào trong 60 ngày qua.</li>}
+        {data && data.items.length === 0 && (
+          <li className="py-8 text-center text-[14px] text-text-muted">
+            {term ? 'Không tìm thấy phiếu nào.' : tab === 'can' ? 'Không còn phiếu nào cần nhận.' : 'Chưa có phiếu nào đã nhận trong 60 ngày qua.'}
+          </li>
+        )}
         {data?.items.map((b) => (
           <li key={b.id}>
-            <button type="button" onClick={() => router.push(`/${b.id}`)}
+            <button type="button" onClick={() => router.push(b.trangThai < 2 ? `/${b.id}?nhan=1` : `/${b.id}`)}
               className="flex min-h-[72px] w-full items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-left active:bg-primary-light">
-              <QrCode size={28} className="shrink-0 text-primary" aria-hidden />
               <span className="min-w-0 flex-1">
-                <span className="flex items-center justify-between gap-2">
-                  <span className="text-[15px] font-semibold text-primary">{b.code}</span>
-                  <BookingStatus value={b.trangThai} />
-                </span>
-                <span className="block truncate text-[14.5px] text-text-primary">{b.customerName ?? '(không tên khách)'}</span>
-                <span className="block truncate text-[12.5px] text-text-muted">
-                  {b.soKienNhan > 0 ? `${b.soKienNhan}/${b.soKienBook || b.soKienNhan} kiện` : b.soKienBook ? `${b.soKienBook} kiện` : 'Tại kho'}
-                  {b.kg ? ` · ${b.kg} kg` : ''}{b.orderNumber ? ` · bill ${b.orderNumber}` : ''} · {b.staffName || '—'} · {fmtDateTime(b.createDate)}
+                <span className="block truncate text-[15.5px] font-semibold text-text-primary">{b.customerName ?? '(không tên khách)'}</span>
+                <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <BookingStatus value={b.trangThai} nhan={b.soKienNhan} khai={b.soKienBook} />
+                  <span className="text-[12.5px] text-text-muted">
+                    {b.code}{b.trangThai === 0 && b.soKienBook ? ` · ${b.soKienBook} kiện` : ''}{b.kg ? ` · ${b.kg} kg` : ''} · {fmtDateTime(b.createDate)}
+                  </span>
                 </span>
               </span>
+              <ChevronRight size={20} className="shrink-0 text-text-muted" aria-hidden />
             </button>
           </li>
         ))}
@@ -108,6 +107,29 @@ export default function BookingsPage() {
           <button type="button" disabled={page >= pages} onClick={() => setPage(page + 1)} className="h-11 rounded-lg border border-border bg-surface px-4 text-[13.5px] disabled:opacity-40">Sau</button>
         </div>
       )}
-    </>
+
+      {sheetOpen && (
+        <div className="fixed inset-0 z-30 flex items-end bg-black/40" onClick={() => setSheetOpen(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Nhận hàng" onClick={(e) => e.stopPropagation()}
+            className="mx-auto w-full max-w-xl rounded-t-2xl bg-surface p-4 [padding-bottom:max(1rem,env(safe-area-inset-bottom))]">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[17px] font-semibold text-text-primary">Nhận hàng</p>
+              <button type="button" aria-label="Đóng" onClick={() => setSheetOpen(false)} className="grid h-11 w-11 place-items-center rounded-lg text-text-muted"><X size={20} /></button>
+            </div>
+            <button type="button" onClick={() => { setSheetOpen(false); setCameraOpen(true) }}
+              className="mb-2 flex min-h-[64px] w-full items-center gap-3 rounded-xl bg-primary px-4 text-left text-white active:bg-primary-dark">
+              <QrCode size={26} aria-hidden />
+              <span><span className="block text-[16px] font-semibold">Quét mã QR trên phiếu</span><span className="block text-[12.5px] opacity-90">Hàng giao nhận mang về có phiếu</span></span>
+            </button>
+            <Link href="/new?taiKho=1" onClick={() => setSheetOpen(false)}
+              className="flex min-h-[64px] w-full items-center gap-3 rounded-xl border border-border px-4 text-left active:bg-primary-light">
+              <Camera size={26} className="text-primary" aria-hidden />
+              <span><span className="block text-[16px] font-semibold text-text-primary">Không có phiếu</span><span className="block text-[12.5px] text-text-muted">Khách mang hàng tới — chọn khách rồi chụp kiện</span></span>
+            </Link>
+          </div>
+        </div>
+      )}
+      {cameraOpen && <CameraScanner onClose={() => setCameraOpen(false)} onResult={(c) => { setCameraOpen(false); void openByCode(c) }} />}
+    </div>
   )
 }

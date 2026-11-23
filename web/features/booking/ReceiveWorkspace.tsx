@@ -1,14 +1,13 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Check, ImageUp, Loader2, Plus, RefreshCw, Sparkles } from 'lucide-react'
+import { Camera, Check, ChevronDown, ImageUp, Loader2, Plus, RefreshCw, Sparkles } from 'lucide-react'
 import { Card, ErrorBox } from '@/shared/kit/Page'
 import { Btn } from '@/shared/kit/Fields'
 import { scaleImageUrl } from '@/shared/kit/ScaleImage'
 import { clientFetch, clientUpload } from '@/shared/lib/api'
-import { fmtNumber, quiDoi } from '@/shared/lib/format'
 import { shrinkImage } from '@/shared/lib/image'
 import { cn } from '@/shared/lib/utils'
-import type { BookingDetail } from './bookingShared'
+import { toDecimal, type BookingDetail } from './bookingShared'
 
 type Key = 'dai' | 'rong' | 'cao' | 'tl'
 type Form = Record<Key, string>
@@ -105,7 +104,7 @@ export default function ReceiveWorkspace({ booking, onChange, onDone }: { bookin
 
   function edit(k: Key, v: string) {
     typed.current.add(k)
-    setForm((cur) => ({ ...cur, [k]: v.replace(k === 'tl' ? /[^\d.]/g : /\D/g, '') }))
+    setForm((cur) => ({ ...cur, [k]: k === 'tl' ? toDecimal(v) : v.replace(/\D/g, '') }))
     setAi((cur) => (cur && cur.fields.has(k) ? { ...cur, fields: new Set(Array.from(cur.fields).filter((x) => x !== k)) } : cur))
   }
 
@@ -113,8 +112,6 @@ export default function ReceiveWorkspace({ booking, onChange, onDone }: { bookin
   const dimOk = [n.dai, n.rong, n.cao].every((v) => Number.isInteger(v) && v >= 1 && v <= 999)
   const tlOk = form.tl.trim() !== '' && Number.isFinite(n.tl) && n.tl >= 0 && n.tl <= 99999
   const valid = dimOk && tlOk
-  const qd = dimOk ? quiDoi(n.dai, n.rong, n.cao) : null
-  const cw = qd !== null && tlOk ? Math.max(n.tl, qd) : null
   const isLast = declared > 0 && !existing && booking.kiens.length + 1 >= declared
   const canFinish = booking.trangThai < 2 && booking.kiens.length > 0 && (declared === 0 || booking.kiens.length < declared)
 
@@ -151,7 +148,7 @@ export default function ReceiveWorkspace({ booking, onChange, onDone }: { bookin
   }
 
   async function finish() {
-    const msg = declared ? `Mới nhận ${booking.kiens.length}/${declared} kiện. Chốt "kho đã nhận"?` : `Chốt "kho đã nhận" với ${booking.kiens.length} kiện?`
+    const msg = declared ? `Mới nhận ${booking.kiens.length}/${declared} kiện. Xong — không còn kiện nào nữa?` : `Xong — đã nhận ${booking.kiens.length} kiện?`
     if (!window.confirm(msg)) return
     setBusy(true)
     try {
@@ -183,72 +180,87 @@ export default function ReceiveWorkspace({ booking, onChange, onDone }: { bookin
     )
   }
 
+  const hasPhoto = Boolean(photo || existing?.hasPhoto)
   return (
     <>
-      <Card className="mb-3 print:hidden">
-        <div role="progressbar" aria-valuemin={0} aria-valuemax={declared || booking.kiens.length} aria-valuenow={booking.kiens.length} aria-label="Tiến độ nhận kiện">
-          {declared > 0 && <div className="h-2 overflow-hidden rounded-full bg-background"><div className="h-full bg-success transition-all" style={{ width: `${Math.min(100, (booking.kiens.length / declared) * 100)}%` }} /></div>}
-          <p className="mt-1 text-[12.5px] text-text-muted">Đã nhận {booking.kiens.length}{declared ? `/${declared}` : ''} kiện</p>
-        </div>
-        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-          {Array.from({ length: chips }, (_, i) => i + 1).map((k) => (
-            <button key={k} type="button" disabled={k > booking.kiens.length + 1} onClick={() => openKien(booking, k)}
-              aria-label={`Kiện ${k}${saved.has(k) ? ' đã nhận' : ''}`} aria-current={k === current}
-              className={cn('grid h-11 min-w-[44px] shrink-0 place-items-center rounded-lg border text-[14px] font-medium disabled:opacity-40',
-                saved.has(k) ? 'border-success bg-success/10 text-success' : 'border-border bg-surface text-text-secondary',
-                k === current && 'ring-2 ring-primary')}>
-              {saved.has(k) ? <Check size={16} /> : k}
-            </button>
-          ))}
-          {canAddExtra && (
-            <button type="button" onClick={() => openKien(booking, booking.kiens.length + 1)} aria-label="Thêm kiện" aria-current={current === booking.kiens.length + 1}
-              className={cn('flex h-11 shrink-0 items-center gap-1 rounded-lg border border-dashed border-border px-3 text-[13.5px] text-text-secondary',
-                current === booking.kiens.length + 1 && 'ring-2 ring-primary')}>
-              <Plus size={16} /> Kiện {booking.kiens.length + 1}
-            </button>
-          )}
-        </div>
-      </Card>
+      <div className="mb-3 flex items-center justify-between gap-2 print:hidden">
+        <p className="text-[22px] font-bold text-text-primary">
+          Kiện {current}{declared ? <span className="text-text-muted"> / {declared}</span> : ''}
+          {declared > 0 && current > declared && <span className="ml-1 text-[14px] font-medium text-amber-700">(thêm)</span>}
+        </p>
+        {booking.kiens.some((k) => k.kienSo !== current) && <button type="button" onClick={sameAsPrevious} className="h-11 rounded-lg px-3 text-[13.5px] font-medium text-primary">Giống kiện trước</button>}
+      </div>
 
-      {flash && !error && <p className="mb-2 text-[13px] font-medium text-success print:hidden" role="status">✓ {flash}</p>}
+      {(booking.kiens.length > 0 || canAddExtra) && (
+        <details className="group mb-3 rounded-lg border border-border bg-surface print:hidden" open={existing !== undefined}>
+          <summary className="flex h-11 cursor-pointer list-none items-center justify-between px-3 text-[13.5px] text-text-secondary">
+            <span>Đã lưu {booking.kiens.length}{declared ? `/${declared}` : ''} kiện · <span className="text-primary">sửa kiện đã lưu</span></span>
+            <ChevronDown size={18} className="transition-transform group-open:rotate-180" aria-hidden />
+          </summary>
+          <div className="flex flex-wrap gap-2 border-t border-border p-3">
+            {Array.from({ length: chips }, (_, i) => i + 1).map((k) => (
+              <button key={k} type="button" disabled={k > booking.kiens.length + 1} onClick={() => openKien(booking, k)}
+                aria-label={`Kiện ${k}${saved.has(k) ? ' đã lưu' : ''}`} aria-current={k === current}
+                className={cn('flex h-11 min-w-[52px] items-center justify-center gap-1 rounded-lg border px-2 text-[14px] font-medium disabled:opacity-40',
+                  saved.has(k) ? 'border-success bg-success/10 text-success' : 'border-border bg-surface text-text-secondary',
+                  k === current && 'ring-2 ring-primary')}>
+                {saved.has(k) && <Check size={14} aria-hidden />}{k}
+              </button>
+            ))}
+            {canAddExtra && (
+              <button type="button" onClick={() => openKien(booking, booking.kiens.length + 1)} aria-label="Thêm kiện" aria-current={current === booking.kiens.length + 1}
+                className={cn('flex h-11 items-center gap-1 rounded-lg border border-dashed border-border px-3 text-[13.5px] text-text-secondary',
+                  current === booking.kiens.length + 1 && 'ring-2 ring-primary')}>
+                <Plus size={16} /> Thêm kiện
+              </button>
+            )}
+          </div>
+        </details>
+      )}
+
+      {flash && !error && <p className="mb-2 rounded-lg bg-success/10 px-3 py-2 text-[14px] font-medium text-success print:hidden" role="status">✓ {flash}</p>}
       {error && <div className="mb-3 print:hidden"><ErrorBox message={error} /></div>}
 
       <Card className="print:hidden">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-[15px] font-semibold text-text-primary">Kiện {current}{declared ? ` / ${declared}` : ''}{declared && current > declared ? ' (thêm)' : ''}</p>
-          {booking.kiens.some((k) => k.kienSo !== current) && <button type="button" onClick={sameAsPrevious} className="h-11 rounded-lg px-3 text-[13.5px] font-medium text-primary">Giống kiện trước</button>}
-        </div>
-
         <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void pick(e.target.files)} />
         <input ref={gallery} type="file" accept="image/*" hidden onChange={(e) => void pick(e.target.files)} />
-        <div className="mb-2 flex items-center gap-2">
-          {photo
-            // eslint-disable-next-line @next/next/no-img-element -- xem trước ảnh blob cục bộ
-            ? <img src={photo.url} alt="Ảnh kiện vừa chụp" className="h-20 w-20 shrink-0 rounded-lg border border-border object-cover" />
-            : existing?.hasPhoto
+        {hasPhoto ? (
+          <div className="mb-3 flex items-center gap-2">
+            {photo
+              // eslint-disable-next-line @next/next/no-img-element -- xem trước ảnh blob cục bộ
+              ? <img src={photo.url} alt="Ảnh kiện vừa chụp" className="h-20 w-20 shrink-0 rounded-lg border border-border object-cover" />
               // eslint-disable-next-line @next/next/no-img-element -- ảnh động qua proxy có cookie
-              ? <img src={`${scaleImageUrl(`/api/pickup-bookings/${booking.id}/kien/${current}/photo`)}&v=${version}`} alt={`Ảnh kiện ${current} đã lưu`} className="h-20 w-20 shrink-0 rounded-lg border border-border object-cover" />
-              : <div className="grid h-20 w-20 shrink-0 place-items-center rounded-lg border border-dashed border-border text-[11.5px] text-text-muted">Chưa ảnh</div>}
-          <Btn type="button" variant={photo || existing?.hasPhoto ? 'outline' : 'primary'} className="h-14 flex-1 text-[14.5px]" onClick={() => camera.current?.click()}>
-            <Camera size={20} /> {photo || existing?.hasPhoto ? 'Chụp lại' : 'Chụp ảnh kiện'}
-          </Btn>
-          <Btn type="button" variant="outline" className="h-14 px-3" aria-label="Chọn ảnh từ máy" onClick={() => gallery.current?.click()}><ImageUp size={20} /></Btn>
-        </div>
-        {!photo && !existing && !aiOff && <p className="mb-3 text-[12.5px] text-text-muted">Chụp kiện trên bàn cân (thấy màn hình cân, có thước càng tốt) — AI sẽ điền sẵn số đo.</p>}
+              : <img src={`${scaleImageUrl(`/api/pickup-bookings/${booking.id}/kien/${current}/photo`)}&v=${version}`} alt={`Ảnh kiện ${current} đã lưu`} className="h-20 w-20 shrink-0 rounded-lg border border-border object-cover" />}
+            <Btn type="button" variant="outline" className="h-14 flex-1 text-[14.5px]" onClick={() => camera.current?.click()}><Camera size={20} /> Chụp lại</Btn>
+            <Btn type="button" variant="outline" className="h-14 px-3" aria-label="Chọn ảnh có sẵn" onClick={() => gallery.current?.click()}><ImageUp size={20} /></Btn>
+          </div>
+        ) : (
+          <div className="mb-3">
+            <Btn type="button" className="h-20 w-full text-[18px]" onClick={() => camera.current?.click()}><Camera size={26} /> Chụp kiện</Btn>
+            <button type="button" onClick={() => gallery.current?.click()} className="mt-1 h-11 w-full text-[13.5px] text-text-secondary">hoặc chọn ảnh có sẵn</button>
+          </div>
+        )}
 
         <div aria-live="polite">
-          {aiBusy && <p className="mb-3 flex items-center gap-2 text-[13px] text-text-secondary"><Loader2 className="animate-spin" size={16} /> AI đang đọc ảnh…</p>}
+          {aiBusy && <p className="mb-3 flex items-center gap-2 rounded-lg bg-primary-light px-3 py-2 text-[14px] text-primary"><Loader2 className="animate-spin" size={18} /> AI đang đọc số trên thùng…</p>}
           {!aiBusy && ai && ai.fields.size > 0 && (
-            <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+            <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
               <Sparkles size={16} className="mt-0.5 shrink-0" aria-hidden />
-              <span className="flex-1"><b>AI gợi ý — kiểm tra trước khi lưu.</b> {ai.goiY.ghiChu}</span>
+              <span className="flex-1"><b>Ô viền vàng do AI điền — xem lại rồi Lưu.</b> {ai.goiY.ghiChu}</span>
               {photo && <button type="button" onClick={() => void analyze(photo.file)} className="-my-1 flex h-9 shrink-0 items-center gap-1 rounded px-2 font-medium" aria-label="AI đọc lại ảnh"><RefreshCw size={14} /> Đọc lại</button>}
             </div>
           )}
-          {!aiBusy && aiMsg && <p className="mb-3 text-[12.5px] text-text-muted">{aiMsg}</p>}
+          {!aiBusy && aiMsg && <p className="mb-3 text-[13px] text-text-muted">{aiMsg}</p>}
         </div>
 
-        <div className="mb-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Loại kiện">
+        <div className="grid grid-cols-2 gap-3">
+          {num('dai', 'Dài (cm)', daiBox)}
+          {num('rong', 'Rộng (cm)')}
+          {num('cao', 'Cao (cm)')}
+          {num('tl', 'Cân (kg)')}
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Loại kiện">
           {(['CARTON', 'TUI'] as Loai[]).map((l) => (
             <button key={l} type="button" role="radio" aria-checked={loai === l} onClick={() => setLoai(l)}
               className={cn('h-11 rounded-lg border text-[14px]', loai === l ? 'border-primary bg-primary-light font-semibold text-primary' : 'border-border bg-surface text-text-secondary')}>
@@ -256,24 +268,14 @@ export default function ReceiveWorkspace({ booking, onChange, onDone }: { bookin
             </button>
           ))}
         </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          {num('dai', 'Dài (cm)', daiBox)}
-          {num('rong', 'Rộng (cm)')}
-          {num('cao', 'Cao (cm)')}
-          {num('tl', 'Cân thực (kg)')}
-        </div>
-        <p className="mt-3 text-[13.5px] text-text-secondary" aria-live="polite">
-          Quy đổi <b>{qd === null ? '—' : fmtNumber(qd)}</b> · Cân tính cước <b className="text-primary">{cw === null ? '—' : fmtNumber(cw)} kg</b>
-        </p>
       </Card>
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface p-3 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom))] print:hidden">
         <div className="mx-auto flex max-w-xl gap-2">
-          {canFinish && <Btn type="button" variant="outline" className="h-12 px-3 text-[13.5px]" disabled={busy} onClick={finish}>{declared ? 'Chốt nhận' : 'Xong'}</Btn>}
-          <Btn type="button" className="h-12 flex-1 text-[15px]" disabled={!valid || busy || aiBusy} onClick={save}>
-            {busy ? <Loader2 className="animate-spin" size={18} /> : <Check size={18} />}
-            {busy ? 'Đang lưu…' : existing ? 'Lưu sửa' : isLast ? 'Lưu kiện cuối' : 'Lưu & kiện tiếp'}
+          {canFinish && <Btn type="button" variant="outline" className="h-14 px-4 text-[15px]" disabled={busy} onClick={finish}>Xong</Btn>}
+          <Btn type="button" className="h-14 flex-1 text-[16px]" disabled={!valid || busy || aiBusy} onClick={save}>
+            {busy ? <Loader2 className="animate-spin" size={20} /> : <Check size={20} />}
+            {busy ? 'Đang lưu…' : existing ? `Lưu sửa kiện ${current}` : isLast ? `Lưu kiện ${current} (cuối)` : `Lưu kiện ${current}`}
           </Btn>
         </div>
       </div>

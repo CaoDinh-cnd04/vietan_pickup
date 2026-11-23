@@ -51,19 +51,14 @@ export default function BookingDetailPage() {
   if (receiving && !locked) {
     return (
       <div className="mx-auto max-w-xl pb-32">
-        <button type="button" onClick={() => { setReceiving(false); reload() }} className="mb-3 inline-flex h-11 items-center gap-1.5 text-[13.5px] text-text-secondary">
-          <ArrowLeft size={16} /> Về phiếu {data.code}
-        </button>
-        <Card className="mb-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[18px] font-bold text-primary">{data.code}</p>
-            <BookingStatus value={data.trangThai} />
+        <div className="mb-3 flex items-center gap-2">
+          <Link href="/" aria-label="Về danh sách" className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-border bg-surface text-text-secondary"><ArrowLeft size={18} /></Link>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[16px] font-semibold text-text-primary">{data.customerName ?? '(không tên khách)'}</p>
+            <p className="truncate text-[12.5px] text-text-muted">{data.code}{data.tenHang ? ` · ${data.tenHang}` : ''}</p>
           </div>
-          <p className="truncate text-[15px] font-semibold text-text-primary">{data.customerName ?? '(không tên khách)'}</p>
-          <p className="text-[12.5px] text-text-muted">
-            {data.soKienBook ? `Khai ${data.soKienBook} kiện` : 'Khách mang tới kho'}{data.kgDuKien ? ` · ${data.kgDuKien} kg` : ''}{data.tenHang ? ` · ${data.tenHang}` : ''}
-          </p>
-        </Card>
+          <button type="button" onClick={() => { setReceiving(false); reload() }} className="h-11 shrink-0 rounded-lg px-2 text-[13px] text-primary">Xem phiếu</button>
+        </div>
         <ReceiveWorkspace booking={data} onChange={setFresh} onDone={() => setReceiving(false)} />
       </div>
     )
@@ -71,7 +66,7 @@ export default function BookingDetailPage() {
 
   return (
     <div className="mx-auto max-w-xl pb-24 print:max-w-none print:pb-0">
-      <Link href="/" className="mb-3 inline-flex h-11 items-center gap-1.5 text-[13.5px] text-text-secondary print:hidden"><ArrowLeft size={16} /> Danh sách pickup</Link>
+      <Link href="/" className="mb-3 inline-flex h-11 items-center gap-1.5 text-[13.5px] text-text-secondary print:hidden"><ArrowLeft size={16} /> Danh sách</Link>
 
       <Card className="print:border-0 print:shadow-none">
         <div className="flex flex-col items-center gap-2 text-center">
@@ -80,7 +75,7 @@ export default function BookingDetailPage() {
             ? <img src={qr} alt={`Mã QR ${data.code}`} width={220} height={220} className="h-[220px] w-[220px]" />
             : <div className="grid h-[220px] w-[220px] place-items-center text-[12px] text-text-muted">Đang tạo QR…</div>}
           <p className="text-[28px] font-bold tracking-wider text-text-primary">{data.code}</p>
-          <BookingStatus value={data.trangThai} />
+          <BookingStatus value={data.trangThai} nhan={data.kiens.length} khai={data.soKienBook} />
         </div>
 
         <dl className="mt-4 space-y-2 text-[14px]">
@@ -126,7 +121,7 @@ export default function BookingDetailPage() {
           </Btn>
           {!locked && (
             <Btn type="button" className="h-12 flex-1 text-[15px]" onClick={() => setReceiving(true)}>
-              <PackageCheck size={18} /> {data.trangThai === 2 ? 'Xem / sửa kiện' : 'Nhận hàng kho'}
+              <PackageCheck size={18} /> {data.trangThai === 2 ? 'Xem / sửa kiện' : data.kiens.length ? 'Nhận tiếp' : 'Nhận kiện'}
             </Btn>
           )}
         </div>

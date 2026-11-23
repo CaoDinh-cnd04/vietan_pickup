@@ -153,7 +153,7 @@ public static class Bookings
         });
 
         // Danh sách: vận đơn nháp + vận đơn có lệnh pickup (kể cả đã in bill) trong khoảng ngày.
-        g.MapGet("", async (PickupDb db, DateTime? fromDate, DateTime? toDate, CancellationToken ct, int status = -1, string search = "", int page = 1, int pageSize = 25) =>
+        g.MapGet("", async (PickupDb db, DateTime? fromDate, DateTime? toDate, CancellationToken ct, int status = -1, string @group = "", string search = "", int page = 1, int pageSize = 25) =>
         {
             var p0 = Math.Max(page, 1);
             var size = Math.Clamp(pageSize, 1, 200);
@@ -167,6 +167,7 @@ public static class Bookings
                     let st = m.OrderNumber > 0 ? 3 : pk != null && pk.PickDateEnd != null ? 2 : dims > 0 ? 1 : 0
                     where m.CreateDate >= dateFrom && m.CreateDate <= dateTo && (m.OrderNumber == null || pk != null)
                           && (status == -1 || st == status)
+                          && (@group != "can" || st < 2) && (@group != "xong" || st >= 2)   // nhóm cho kho: cần nhận (0,1) · đã nhận (2,3)
                           && (s == "" || (codeId != null && m.Id == codeId) || (codeOn != null && m.OrderNumber == codeOn) || m.CustomerName!.Contains(s) || m.TenHang!.Contains(s))
                     select new { m.Id, m.CustomerId, m.CustomerName, m.CreateUser, m.PickupEst, m.CreateDate, m.SoKien, m.TrongLuong, m.TenHang, m.OrderNumber,
                                  PickDate = (DateTime?)pk!.PickDate, SoKienBook = (int?)pk!.SoKienBook, St = st, Dims = dims };

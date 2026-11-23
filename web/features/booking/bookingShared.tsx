@@ -16,15 +16,23 @@ export interface BookingKien {
   kienSo: number; loai: 'CARTON' | 'TUI'; dai: number; rong: number; cao: number; trongLuong: number; quiDoi: number; chargeWeight: number; hasPhoto: boolean
 }
 
-/** Trạng thái suy ra ở API (Bookings.StatusOf): chưa kiện nào · đã có kiện · kho chốt · CRM đã in bill (khoá sửa). */
+/** Trạng thái suy ra ở API (Bookings.StatusOf): 0 chưa kiện nào · 1 đã có kiện · 2 kho đã nhận đủ/bấm Xong · 3 CRM đã in bill (khoá sửa). */
 export const BOOKING_STATUS = [
-  { value: 0, label: 'Chờ lấy', tone: 'amber' as const },
+  { value: 0, label: 'Chưa nhận', tone: 'amber' as const },
   { value: 1, label: 'Đang nhận', tone: 'blue' as const },
-  { value: 2, label: 'Kho đã nhận', tone: 'green' as const },
-  { value: 3, label: 'Đã lập bill', tone: 'gray' as const },
+  { value: 2, label: '✓ Đã nhận đủ', tone: 'green' as const },
+  { value: 3, label: '🔒 Đã có bill', tone: 'gray' as const },
 ]
 
-export function BookingStatus({ value }: { value: number }) {
+/** Nhãn trạng thái; "Đang nhận" kèm số kiện (2/5) để kho biết còn bao nhiêu. */
+export function BookingStatus({ value, nhan, khai }: { value: number; nhan?: number; khai?: number }) {
   const s = BOOKING_STATUS.find((x) => x.value === value) ?? BOOKING_STATUS[0]
-  return <StatusBadge tone={s.tone}>{s.label}</StatusBadge>
+  const count = value === 1 && nhan ? ` ${nhan}${khai ? `/${khai}` : ''} kiện` : ''
+  return <StatusBadge tone={s.tone}>{s.label}{count}</StatusBadge>
+}
+
+/** Ô nhập kg: bàn phím iPhone tiếng Việt có dấu phẩy thập phân ⇒ đổi "," thành ".", chỉ giữ chữ số và 1 dấu chấm. */
+export function toDecimal(v: string): string {
+  const [int, ...rest] = v.replace(/,/g, '.').replace(/[^\d.]/g, '').split('.')
+  return rest.length ? `${int}.${rest.join('')}` : int
 }
