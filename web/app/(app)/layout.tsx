@@ -1,7 +1,6 @@
 'use client'
-import { Suspense, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
 import { LogOut, User } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 
@@ -12,24 +11,20 @@ function readName(): string {
   } catch { return '' }
 }
 
-/** Menu của app — 3 lối vào. `/[id]` (phiếu) thuộc "Phiếu pickup". */
+/** Menu của app (chỉ cho kho). Mọi trang (phiếu, nhận tại kho — mở từ nút "Nhận hàng") thuộc "Hàng về kho". */
 const NAV = [
-  { key: 'list', href: '/', label: 'Phiếu pickup' },
-  { key: 'book', href: '/new', label: 'Book lấy hàng' },
-  { key: 'kho', href: '/new?taiKho=1', label: 'Nhận tại kho' },
+  { href: '/', label: 'Hàng về kho' },
 ] as const
 
 function MainNav() {
-  const pathname = usePathname()
-  const taiKho = useSearchParams().get('taiKho') === '1'
-  const current = pathname === '/new' ? (taiKho ? 'kho' : 'book') : 'list'
+  const current = '/'
   return (
     <ul className="flex min-w-0 items-center gap-px overflow-x-auto">
       {NAV.map((n) => (
-        <li key={n.key}>
-          <Link href={n.href} aria-current={current === n.key ? 'page' : undefined}
+        <li key={n.href}>
+          <Link href={n.href} aria-current={current === n.href ? 'page' : undefined}
             className={cn('inline-flex h-11 items-center whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold md:h-[30px]',
-              current === n.key ? 'bg-primary text-white' : 'text-nav-muted hover:bg-white/[0.08] hover:text-white')}>
+              current === n.href ? 'bg-primary text-white' : 'text-nav-muted hover:bg-white/[0.08] hover:text-white')}>
             {n.label}
           </Link>
         </li>
@@ -63,7 +58,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <span className="hidden sm:inline">Việt An</span>
             <small className="rounded border border-nav-muted px-1.5 py-px text-[11px] font-semibold text-nav-muted">Pickup</small>
           </Link>
-          <Suspense><MainNav /></Suspense>
+          <MainNav />
         </nav>
       </header>
       <main className="p-4 md:p-5">{children}</main>

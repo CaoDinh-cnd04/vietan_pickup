@@ -31,6 +31,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 Auth.Map(app, key, issuer, app.Services.GetRequiredService<TimeProvider>());
 Bookings.Map(app);
+Pickups.Map(app);
 KienAi.Map(app);
 app.Run();
 

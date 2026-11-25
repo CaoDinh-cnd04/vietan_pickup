@@ -26,7 +26,7 @@ public static class Bookings
     private static readonly string[] Loais = ["CARTON", "TUI"];
 
     public static string Code(long id) => $"B{id}";
-    private static string NoteOf(long id, string? note) => string.IsNullOrWhiteSpace(note) ? Code(id) : $"{Code(id)} - {note.Trim()}";
+    internal static string NoteOf(long id, string? note) => string.IsNullOrWhiteSpace(note) ? Code(id) : $"{Code(id)} - {note.Trim()}";
     private static string? UserNote(long id, string? note) => note is { } n && n.StartsWith(Code(id) + " - ") ? n[(Code(id).Length + 3)..] : null;
 
     /// <summary>Công thức legacy: dài×rộng×cao/5000, làm tròn lên theo bước 0,5 (đúng x.5 → lên số nguyên kế tiếp).</summary>

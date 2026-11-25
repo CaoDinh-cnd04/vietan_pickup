@@ -6,6 +6,10 @@ export interface BookingRow {
   planDate: string | null; trangThai: number; createDate: string | null; soKienBook: number; soKienNhan: number; kg: number | null
   tenHang: string | null; orderNumber: number | null; saleName: string
 }
+/** Lệnh bảng Pickup chưa gắn vận đơn (tab Pickup của kho). */
+export interface PickupRow {
+  pickupId: number; customerId: number | null; customerName: string | null; staffName: string; pickDate: string; soKienBook: number; note: string | null
+}
 export interface BookingDetail {
   id: number; code: string; customerId: number | null; customerName: string | null; customerPhone: string | null; staffName: string | null
   contactName: string | null; contactPhone: string | null; pickupAddress: string | null; planDate: string | null; tenHang: string | null; note: string | null
