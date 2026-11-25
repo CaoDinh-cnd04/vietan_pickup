@@ -21,7 +21,9 @@ public static class AppLog
         ["luu-kien"] = "Lưu kiện (kho)",
         ["chot-nhan"] = "Chốt kho đã nhận",
         ["huy"] = "Huỷ lệnh",
+        ["anh-hang"] = "Ảnh hàng hoá",
         ["anh-hoan-thien"] = "Ảnh hoàn thiện",
+        ["anh-kien"] = "Ảnh kiện (đóng gói)",
         ["can-lai"] = "Cân lại kiện (bước cuối)",
     };
 

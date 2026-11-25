@@ -46,7 +46,7 @@ export default function NewBookingPage() {
 
   return (
     <div className="mx-auto max-w-xl pb-28">
-      <PageHeader title="Khách mang hàng tới" subtitle="Chọn khách là vào chụp kiện ngay." />
+      <PageHeader title="Khách mang hàng tới" subtitle="Chọn khách là vào chụp ảnh ngay." />
 
       <div className="mb-3 grid grid-cols-2 rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Loại khách">
         {MODES.map((m) => (
@@ -98,7 +98,7 @@ export default function NewBookingPage() {
         <div className="mx-auto max-w-xl">
           <Btn type="button" className="h-12 w-full text-[15px]" disabled={busy} onClick={save}>
             {busy ? <Loader2 className="animate-spin" size={18} /> : <PackageOpen size={18} />}
-            {busy ? 'Đang lưu…' : 'Bắt đầu chụp kiện'}
+            {busy ? 'Đang lưu…' : 'Bắt đầu chụp ảnh'}
           </Btn>
         </div>
       </div>

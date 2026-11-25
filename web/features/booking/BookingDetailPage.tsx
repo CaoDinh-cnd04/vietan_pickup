@@ -9,10 +9,10 @@ import { Btn } from '@/shared/kit/Fields'
 import { useAction, useApi } from '@/shared/lib/hooks'
 import { clientFetch } from '@/shared/lib/api'
 import { fmtDateTime } from '@/shared/lib/format'
+import { imageUrl } from '@/shared/kit/Admin'
 import { BookingStatus, KhachName, type BookingDetail } from './bookingShared'
-import ReceiveWorkspace from './ReceiveWorkspace'
 import PushedToCms from './PushedToCms'
-import FinishedPhoto from './FinishedPhoto'
+import KhoReceive from './KhoReceive'
 
 /** QR chỉ chứa MÃ (B914700): tên khách/nhân viên tra từ DB khi quét, không nhúng thông tin cá nhân vào mã. */
 function useQr(code: string | undefined) {
@@ -42,6 +42,8 @@ export default function BookingDetailPage() {
   const { run, busy, error } = useAction()
   const qr = useQr(data?.code)
 
+  async function refresh() { setFresh(await clientFetch<BookingDetail>(`/api/pickup-bookings/${id}`)) }
+
   async function cancel() {
     if (!window.confirm(`Huỷ lệnh ${data?.code}? Vận đơn nháp sẽ bị xoá.`)) return
     if (await run('POST', `/api/pickup-bookings/${id}/cancel`)) router.push('/')
@@ -63,8 +65,7 @@ export default function BookingDetailPage() {
           </div>
           <button type="button" onClick={() => { setReceiving(false); reload() }} className="h-11 shrink-0 rounded-lg px-2 text-[13px] text-primary">Xem phiếu</button>
         </div>
-        <div className="mb-3"><FinishedPhoto bookingId={data.id} photoId={data.finishedPhotoId} onUploaded={async () => setFresh(await clientFetch<BookingDetail>(`/api/pickup-bookings/${id}`))} /></div>
-        <ReceiveWorkspace booking={data} onChange={setFresh} onDone={() => { setReceiving(false); setPushed(true) }} />
+        <KhoReceive booking={data} onReload={refresh} onDone={async () => { await refresh(); setReceiving(false); setPushed(true) }} />
       </div>
     )
   }
@@ -100,9 +101,20 @@ export default function BookingDetailPage() {
           <Row k="Ghi chú" v={data.note} />
         </dl>
 
+        {(data.goodsPhotoId || data.finishedPhotoId) && (
+          <div className="mt-4 flex gap-3 print:hidden">
+            {([['Ảnh hàng hoá', data.goodsPhotoId], ['Ảnh kiện', data.finishedPhotoId]] as const).map(([t, pid]) => pid && (
+              <a key={t} href={imageUrl(pid)} target="_blank" rel="noreferrer" className="text-center text-[12px] text-text-muted">
+                {/* eslint-disable-next-line @next/next/no-img-element -- ảnh qua proxy có cookie */}
+                <img src={imageUrl(pid)} alt={t} className="mb-1 h-24 w-24 rounded-lg border border-border object-cover" />{t}
+              </a>
+            ))}
+          </div>
+        )}
+
         {data.kiens.length > 0 && (
           <>
-            <h3 className="mb-1 mt-4 text-[13.5px] font-semibold text-text-primary">Kho đã nhận ({data.kiens.length} kiện)</h3>
+            <h3 className="mb-1 mt-4 text-[13.5px] font-semibold text-text-primary">Kích thước kho đo (dữ liệu cũ, {data.kiens.length} kiện)</h3>
             <table className="w-full text-[13.5px]">
               <thead><tr className="border-b border-border text-left text-text-muted"><th className="py-1.5 font-medium">Kiện</th><th className="py-1.5 font-medium">Dài×Rộng×Cao</th><th className="py-1.5 text-right font-medium">Cân</th><th className="py-1.5 text-right font-medium">Tính cước</th></tr></thead>
               <tbody>
@@ -116,11 +128,10 @@ export default function BookingDetailPage() {
             </table>
           </>
         )}
-        {data.trangThai === 2 && <p className="mt-3 rounded-lg bg-primary-light px-3 py-2 text-[12.5px] text-primary print:hidden">Kinh doanh mở vận đơn nháp {data.code} trong CRM, bổ sung người nhận rồi In bill — kích thước kiện đã có sẵn.</p>}
+        {data.trangThai === 2 && <p className="mt-3 rounded-lg bg-primary-light px-3 py-2 text-[12.5px] text-primary print:hidden">Kinh doanh mở vận đơn nháp {data.code} trong CMS, bổ sung người nhận rồi In bill và dán shipping mark — nhân viên cuối đo, cân ở màn &quot;Bước cuối&quot;.</p>}
         {locked && <p className="mt-3 text-[12.5px] text-text-muted print:hidden">Bill đã in bên CRM — không sửa kiện ở đây nữa.</p>}
       </Card>
 
-      <div className="mt-3"><FinishedPhoto bookingId={data.id} photoId={data.finishedPhotoId} onUploaded={async () => setFresh(await clientFetch<BookingDetail>(`/api/pickup-bookings/${id}`))} /></div>
       {error && <div className="mt-3 print:hidden"><ErrorBox message={error} /></div>}
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface p-3 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom))] print:hidden">
@@ -131,7 +142,7 @@ export default function BookingDetailPage() {
           </Btn>
           {!locked && (
             <Btn type="button" className="h-12 flex-1 text-[15px]" onClick={() => setReceiving(true)}>
-              <PackageCheck size={18} /> {data.trangThai === 2 ? 'Xem / sửa kiện' : data.kiens.length ? 'Nhận tiếp' : 'Nhận kiện'}
+              <PackageCheck size={18} /> {data.trangThai === 2 ? 'Xem / chụp lại ảnh' : 'Nhận hàng'}
             </Btn>
           )}
         </div>

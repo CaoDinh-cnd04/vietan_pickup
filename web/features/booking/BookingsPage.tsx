@@ -151,7 +151,7 @@ export default function BookingsPage() {
             <Link href="/new" onClick={() => setSheetOpen(false)}
               className="flex min-h-[64px] w-full items-center gap-3 rounded-xl border border-border px-4 text-left active:bg-primary-light">
               <Camera size={26} className="text-primary" aria-hidden />
-              <span><span className="block text-[16px] font-semibold text-text-primary">Không có phiếu</span><span className="block text-[12.5px] text-text-muted">Khách mang hàng tới — chọn khách rồi chụp kiện</span></span>
+              <span><span className="block text-[16px] font-semibold text-text-primary">Không có phiếu</span><span className="block text-[12.5px] text-text-muted">Khách mang hàng tới — chọn khách rồi chụp ảnh</span></span>
             </Link>
           </div>
         </div>

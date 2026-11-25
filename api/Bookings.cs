@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace VietAnPickup;
 
+public sealed record ReceiveRequest(int? SoKien = null);   // null = kho không đếm (số kiện theo bill ở bước cuối)
 public sealed record CreateBookingRequest(long CustomerId, int SoKien = 0, decimal? KgDuKien = null, string? TenHang = null, string? ContactName = null,
     string? ContactPhone = null, string? PickupAddress = null, DateTime? PlanDate = null, string? Note = null, bool TaiKho = false,
     string? KhachMoi = null);   // KhachMoi: tên khách thật khi chưa có hồ sơ — vận đơn tạo dưới tài khoản giữ chỗ của sale (CustomerId)
@@ -11,20 +12,21 @@ public sealed record RowDto(long Id, string Code, long? CustomerId, string? Cust
     DateTime? CreateDate, int SoKienBook, int SoKienNhan, decimal? Kg, string? TenHang, long? OrderNumber, string SaleName, string? KhachMoi);
 public sealed record DetailDto(long Id, string Code, long? CustomerId, string? CustomerName, string? CustomerPhone, string StaffName,
     string? ContactName, string? ContactPhone, string? PickupAddress, DateTime? PlanDate, string? TenHang, string? Note, int TrangThai, DateTime? CreateDate,
-    DateTime? ReceivedDate, int SoKienBook, decimal? KgDuKien, long? OrderNumber, IReadOnlyList<KienDto> Kiens, string SaleName, long? FinishedPhotoId, string? KhachMoi);
+    DateTime? ReceivedDate, int SoKienBook, decimal? KgDuKien, long? OrderNumber, IReadOnlyList<KienDto> Kiens, string SaleName, long? FinishedPhotoId, string? KhachMoi,
+    int SoKienNhan, long? GoodsPhotoId);
 
 /// <summary>
 /// Book pickup + kho nhận hàng trên BẢNG CRM (không bảng riêng):
 /// book = vận đơn nháp MaVanDon (mã quét B&lt;ID&gt;, kiện B&lt;ID&gt;/k — CRM hiểu dạng này, ADR-050) + 1 dòng Pickup (Note = B&lt;ID&gt;);
-/// khách mang hàng tới kho = như trên nhưng không khai số kiện, kho chốt tay. Mỗi kiện kho nhận = 1 dòng MaVanDon_PCS_DIM (kiện k = dòng thứ k theo ID)
-/// + ảnh AHinhAnh_Order (B&lt;ID&gt;_k, DIM) / AHinhAnh_Order_Data. Kinh doanh mở bill nháp trong CRM, bổ sung người nhận rồi In (CRM cấp số bill, khoá sửa).
-/// Trạng thái suy ra: 0 chờ lấy · 1 đang nhận · 2 kho đã nhận · 3 đã lập bill.
+/// khách mang hàng tới kho = như trên nhưng không khai số kiện. KHO chỉ chốt SỐ KIỆN thực nhận (Pickup) + ảnh theo đơn (ảnh hàng DIM, ảnh hoàn thiện
+/// Other, barcode = mã đơn); KHÔNG đo/chụp từng kiện — kích thước, cân do BƯỚC CUỐI cân lại từ ảnh (Reweight.cs). MaVanDon_PCS_DIM chỉ còn đọc (dữ liệu cũ).
+/// Kinh doanh mở bill nháp trong CRM, bổ sung người nhận rồi In (CRM cấp số bill, khoá sửa).
+/// Trạng thái suy ra: 0 chờ nhận · 1 đang nhận (dữ liệu cũ có kiện) · 2 kho đã nhận · 3 đã lập bill.
 /// </summary>
 public static class Bookings
 {
     public const long MaxPhotoBytes = 8 * 1024 * 1024;
     public const string PrintedMessage = "Bill này đã được in, không được cập nhật lại";   // đúng thông báo CRM/legacy
-    private static readonly string[] Loais = ["CARTON", "TUI"];
 
     public static string Code(long id) => $"B{id}";
     internal static string NoteOf(long id, string? note) => string.IsNullOrWhiteSpace(note) ? Code(id) : $"{Code(id)} - {note.Trim()}";
@@ -111,18 +113,24 @@ public static class Bookings
                              join d in db.HinhAnhDatas.AsNoTracking() on h.Id equals d.Id
                              where h.MaVanDonId == id && h.ImageType == "DIM"
                              select h.Barcode).ToListAsync(ct)).ToHashSet();
-        var finished = await FinishedPhotoAsync(db, id, ct);
+        var finished = await OrderPhotoAsync(db, id, "Other", ct);
+        var goods = await OrderPhotoAsync(db, id, "DIM", ct);
         bool HasPhoto(int k) => photos.Contains($"{Code(id)}_{k}") || (v.OrderNumber is > 0 && photos.Contains($"{v.OrderNumber}_{k}"));
         var kiens = dims.Select((d, i) => new KienDto(i + 1, d.Loai, d.Dai, d.Rong, d.Cao, d.TrongLuong, d.QuiDoi ?? 0, d.ChargeWeight ?? 0, HasPhoto(i + 1))).ToList();
         return Results.Ok(new DetailDto(v.Id, Code(v.Id), v.CustomerId, c?.CustomerName ?? v.CustomerName, c?.Phone ?? c?.Tel, Auth.StaffName(u),
             v.SenderContactName, v.SenderPhone, v.SenderAddress, v.PickupEst, v.TenHang, UserNote(id, p?.Note),
             StatusOf(v.OrderNumber, p?.PickDateEnd, dims.Count), p?.PickDate ?? v.CreateDate, p?.PickDateEnd,
-            p?.SoKienBook ?? v.SoKien ?? 0, dims.Count == 0 ? v.TrongLuong : null, v.OrderNumber, kiens, Auth.StaffName(sale), finished?.Id, KhachMoiOf(v.CustomerName, v.SenderName)));
+            p?.SoKienBook ?? v.SoKien ?? 0, dims.Count == 0 ? v.TrongLuong : null, v.OrderNumber, kiens, Auth.StaffName(sale), finished?.Id, KhachMoiOf(v.CustomerName, v.SenderName),
+            Math.Max(p?.SoKienNhan ?? 0, dims.Count), goods?.Id));
     }
 
-    /// <summary>Ảnh hoàn thiện (gửi khách xem) của vận đơn: ImageType "Other", 1 tấm/đơn, có dữ liệu trong AHinhAnh_Order_Data.</summary>
-    private static Task<HinhAnh?> FinishedPhotoAsync(PickupDb db, long id, CancellationToken ct) =>
-        db.HinhAnhs.Where(h => h.MaVanDonId == id && h.ImageType == "Other" && db.HinhAnhDatas.Any(d => d.Id == h.Id)).OrderByDescending(h => h.Id).FirstOrDefaultAsync(ct);
+    /// <summary>
+    /// Ảnh THEO ĐƠN do kho chụp (1 tấm/loại, có dữ liệu trong AHinhAnh_Order_Data): "DIM" = ảnh hàng hoá, "Other" = ảnh hoàn thiện gửi khách.
+    /// Barcode = mã đơn, KHÔNG có "_" (quy ước CRM "ảnh theo đơn") ⇒ không lẫn với ảnh kiện "&lt;bill&gt;_k" của bước cuối / màn Nhập kích thước.
+    /// </summary>
+    private static Task<HinhAnh?> OrderPhotoAsync(PickupDb db, long id, string imageType, CancellationToken ct) =>
+        db.HinhAnhs.Where(h => h.MaVanDonId == id && h.ImageType == imageType && !h.Barcode.Contains("_") && db.HinhAnhDatas.Any(d => d.Id == h.Id))
+            .OrderByDescending(h => h.Id).FirstOrDefaultAsync(ct);
 
     public static void Map(IEndpointRouteBuilder app)
     {
@@ -209,14 +217,14 @@ public static class Bookings
                           && (@group != "can" || st < 2) && (@group != "xong" || st >= 2)   // nhóm cho kho: cần nhận (0,1) · đã nhận (2,3)
                           && (s == "" || (codeId != null && m.Id == codeId) || (codeOn != null && m.OrderNumber == codeOn) || m.CustomerName!.Contains(s) || m.SenderName!.Contains(s) || m.TenHang!.Contains(s))
                     select new { m.Id, m.CustomerId, m.CustomerName, m.SenderName, m.CreateUser, m.PickupEst, m.CreateDate, m.SoKien, m.TrongLuong, m.TenHang, m.OrderNumber,
-                                 PickDate = (DateTime?)pk!.PickDate, SoKienBook = (int?)pk!.SoKienBook, St = st, Dims = dims,
+                                 PickDate = (DateTime?)pk!.PickDate, SoKienBook = (int?)pk!.SoKienBook, PkNhan = (int?)pk!.SoKienNhan, St = st, Dims = dims,
                                  SaleId = m.CustomerStaffId > 0 ? m.CustomerStaffId : db.Customers.Where(c => c.CustomerID == m.CustomerId).Select(c => (long?)c.StaffId).FirstOrDefault() };   // NV phụ trách khách
             var total = await q.CountAsync(ct);
             var rows = await q.OrderByDescending(x => x.Id).Skip((p0 - 1) * size).Take(size).ToListAsync(ct);
             var uids = rows.Select(x => x.CreateUser).Concat(rows.Select(x => (int?)x.SaleId)).Distinct().ToList();
             var users = await db.Users.AsNoTracking().Where(u => uids.Contains(u.Id)).ToDictionaryAsync(u => u.Id, ct);
             var items = rows.Select(x => new RowDto(x.Id, Code(x.Id), x.CustomerId, x.CustomerName, Auth.StaffName(x.CreateUser is { } cu ? users.GetValueOrDefault(cu) : null),
-                x.PickupEst, x.St, x.PickDate ?? x.CreateDate, x.SoKienBook ?? x.SoKien ?? 0, x.Dims, x.TrongLuong, x.TenHang, x.OrderNumber,
+                x.PickupEst, x.St, x.PickDate ?? x.CreateDate, x.SoKienBook ?? x.SoKien ?? 0, Math.Max(x.PkNhan ?? 0, x.Dims), x.TrongLuong, x.TenHang, x.OrderNumber,
                 Auth.StaffName(x.SaleId is { } si ? users.GetValueOrDefault((int)si) : null), KhachMoiOf(x.CustomerName, x.SenderName))).ToList();
             return Results.Ok(new { items, page = p0, pageSize = size, totalCount = total });
         });
@@ -255,80 +263,6 @@ public static class Bookings
             return Results.Ok(new { id });
         });
 
-        g.MapPost("/{id:long}/kien", async (long id, HttpRequest req, PickupDb db, TimeProvider clock, CancellationToken ct) =>
-        {
-            if (!req.HasFormContentType) return Bad("Cần gửi multipart/form-data.");
-            IFormCollection form;
-            try { form = await req.ReadFormAsync(ct); }
-            catch (InvalidDataException) { return Bad("Dữ liệu tải lên không hợp lệ."); }
-
-            static bool Int(string? s, int min, int max, out int v) => int.TryParse(s, out v) && v >= min && v <= max;
-            if (!Int(form["kienSo"], 1, 9999, out var kien)) return Bad("Số kiện từ 1 đến 9999.");
-            if (!Int(form["dai"], 1, 999, out var dai) || !Int(form["rong"], 1, 999, out var rong) || !Int(form["cao"], 1, 999, out var cao))
-                return Bad("Dài, rộng, cao là số nguyên từ 1 đến 999 (cm).");
-            if (!decimal.TryParse(form["trongLuong"], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var tl) || tl < 0 || tl > 99999)
-                return Bad("Cân nặng từ 0 đến 99999 kg.");
-            var loai = string.IsNullOrEmpty(form["loai"]) ? "CARTON" : form["loai"].ToString().ToUpperInvariant();
-            if (!Loais.Contains(loai)) return Bad("Loại kiện là CARTON hoặc TUI.");
-
-            byte[]? photo = null; string? type = null;
-            if (form.Files.GetFile("photo") is { } file)
-            {
-                if (file.Length is 0 or > MaxPhotoBytes) return Bad($"Ảnh phải từ 1 byte đến {MaxPhotoBytes / 1024 / 1024}MB.");
-                using var ms = new MemoryStream((int)file.Length);
-                await file.CopyToAsync(ms, ct);
-                photo = ms.ToArray();
-                type = DetectType(photo);
-                if (type is null) return Bad("Chỉ nhận ảnh jpg, png, webp.");
-            }
-
-            var v = await db.VanDons.FirstOrDefaultAsync(x => x.Id == id, ct);
-            if (v is null) return Missing();
-            if (v.OrderNumber is > 0) return Results.Conflict(new { error = PrintedMessage });
-            var dims = await db.Dims.Where(d => d.MaVanDonId == (int)id).OrderBy(d => d.Id).ToListAsync(ct);
-            if (kien > dims.Count + 1) return Bad($"Nhận lần lượt — kiện tiếp theo là {dims.Count + 1}.");
-
-            var staff = Auth.UserId(req.HttpContext);
-            var now = clock.GetLocalNow().DateTime;
-            var qd = QuiDoi(dai, rong, cao);
-            var p = await FindPickup(db, id);
-            var r = await InTx(db, async () =>
-            {
-                var row = kien <= dims.Count ? dims[kien - 1] : null;
-                if (row is null) { db.Dims.Add(row = new PcsDim { MaVanDonId = (int)id }); dims.Add(row); }
-                row.SoLuong = 1; row.Loai = loai; row.Dai = dai; row.Rong = rong; row.Cao = cao; row.TrongLuong = tl; row.QuiDoi = qd; row.ChargeWeight = Math.Max(tl, qd);
-
-                if (photo is not null)
-                {
-                    var barcode = $"{Code(id)}_{kien}";
-                    var h = await db.HinhAnhs.Where(x => x.MaVanDonId == id && x.Barcode == barcode && x.ImageType == "DIM").OrderByDescending(x => x.Id).FirstOrDefaultAsync(ct);
-                    if (h is null)
-                    {
-                        var ext = type switch { "image/png" => "png", "image/webp" => "webp", _ => "jpg" };
-                        db.HinhAnhs.Add(h = new HinhAnh { Barcode = barcode, TenHinh = $"{now:yyyyMMdd}-{Guid.NewGuid():N}.{ext}", CreateDate = now, ImageType = "DIM", MaVanDonId = id });
-                        await db.SaveChangesAsync(ct);   // cần ID_Hinh cho dòng nhị phân
-                    }
-                    var data = await db.HinhAnhDatas.FirstOrDefaultAsync(x => x.Id == h.Id, ct);
-                    if (data is null) db.HinhAnhDatas.Add(data = new HinhAnhData { Id = h.Id });
-                    data.ContentType = type!; data.Data = photo; data.CreateDate = now;
-                }
-
-                if (p is null) db.Pickups.Add(p = new Pickup { CustomerId = v.CustomerId, SoKienBook = v.SoKien ?? 0, PickDate = now, Note = Code(id) });   // vận đơn nháp tạo từ CRM
-                var count = dims.Count;
-                var kg = dims.Sum(d => d.TrongLuong);
-                p.StaffId = staff; p.SoKienNhan = count; p.TongKg = kg;
-                if (p.PickDateEnd is null && p.SoKienBook > 0 && count >= p.SoKienBook) p.PickDateEnd = now;   // đủ số kiện khai ⇒ tự chốt
-                v.SoKien = p.PickDateEnd is not null ? count : Math.Max(p.SoKienBook ?? 0, count);
-                v.TrongLuong = kg; v.ModifyUser = staff; v.ModifyDate = now.Date;
-                await db.SaveChangesAsync(ct);
-                await AppLog.WriteAsync(db, req.HttpContext, "luu-kien", $"{Code(id)}_{kien}",
-                    $"Kiện {kien}: {dai}×{rong}×{cao} cm, {tl} kg, tính cước {Math.Max(tl, qd)} kg{(photo is not null ? ", có ảnh" : "")}", ct);
-                if (p.PickDateEnd == now) await AppLog.WriteAsync(db, req.HttpContext, "chot-nhan", Code(id), $"Tự chốt kho đã nhận {count} kiện, {kg} kg", ct);
-                return new { kienSo = kien, quiDoi = qd, chargeWeight = Math.Max(tl, qd), daNhan = count, daKhai = p.SoKienBook ?? 0, done = p.PickDateEnd is not null };
-            }, ct);
-            return Results.Ok(r);
-        }).DisableAntiforgery().WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(MaxPhotoBytes + 1024 * 1024));
-
         g.MapGet("/{id:long}/kien/{kienSo:int}/photo", async (long id, int kienSo, PickupDb db, HttpContext http, CancellationToken ct) =>
         {
             var on = await db.VanDons.Where(m => m.Id == id).Select(m => m.OrderNumber).FirstOrDefaultAsync(ct);
@@ -344,10 +278,17 @@ public static class Bookings
             return Results.File(a.Data, a.ContentType);
         });
 
-        // Ảnh hoàn thiện (hàng đã đóng xong, gửi khách xem): ImageType "Other", barcode = mã đơn (B<ID> hoặc số bill, không có "_" ⇒
-        // màn Nhập kích thước legacy không liệt kê). 1 tấm/đơn — chụp lại thay dữ liệu.
-        g.MapPost("/{id:long}/finished-photo", async (long id, HttpRequest req, PickupDb db, TimeProvider clock, CancellationToken ct) =>
+        // Ảnh theo đơn của kho: kind "hang" = ảnh hàng hoá (DIM), "kien" = ảnh kiện đã đóng gói, gửi khách xem (Other). Barcode = mã đơn
+        // (B<ID> hoặc số bill, không "_" ⇒ màn Nhập kích thước legacy không liệt kê). 1 tấm/loại/đơn — chụp lại thay dữ liệu.
+        g.MapPost("/{id:long}/photo/{kind}", async (long id, string kind, HttpRequest req, PickupDb db, TimeProvider clock, CancellationToken ct) =>
         {
+            var (imageType, action, label) = kind switch
+            {
+                "hang" => ("DIM", "anh-hang", "ảnh hàng hoá"),
+                "kien" => ("Other", "anh-kien", "ảnh kiện"),
+                _ => ("", "", ""),
+            };
+            if (imageType == "") return Bad("Loại ảnh là hang hoặc kien.");
             if (!req.HasFormContentType) return Bad("Cần gửi multipart/form-data.");
             var (err, photo, type) = await Images.ReadPhotoAsync(await req.ReadFormAsync(ct), ct);
             if (err is not null) return Bad(err);
@@ -356,35 +297,42 @@ public static class Bookings
             if (v is null) return Missing();
             var now = clock.GetLocalNow().DateTime;
             var barcode = v.OrderNumber is > 0 ? v.OrderNumber.Value.ToString() : Code(id);
-            var h = await FinishedPhotoAsync(db, id, ct);
+            var h = await OrderPhotoAsync(db, id, imageType, ct);
             var replaced = h is not null;
             h = await InTx(db, async () =>
             {
-                var r = await Images.PutAsync(db, h, barcode, "Other", id, photo, type!, now, ct);
+                var r = await Images.PutAsync(db, h, barcode, imageType, id, photo, type!, now, ct);
                 await db.SaveChangesAsync(ct);
-                await AppLog.WriteAsync(db, req.HttpContext, "anh-hoan-thien", barcode, replaced ? $"Chụp lại ảnh hoàn thiện {barcode}" : $"Chụp ảnh hoàn thiện {barcode}", ct);
+                await AppLog.WriteAsync(db, req.HttpContext, action, barcode, replaced ? $"Chụp lại {label} {barcode}" : $"Chụp {label} {barcode}", ct);
                 return r;
             }, ct);
             return Results.Ok(new { idHinh = h.Id });
         }).DisableAntiforgery().WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(MaxPhotoBytes + 1024 * 1024));
 
         // Chốt "kho đã nhận" khi số kiện thực khác số khai (hoặc khách mang tới kho, không khai trước).
-        g.MapPost("/{id:long}/receive", async (long id, HttpContext http, PickupDb db, TimeProvider clock, CancellationToken ct) =>
+        // Kho chốt "đã nhận": chỉ cần đủ 2 ảnh theo đơn (ảnh hàng hoá + ảnh kiện). Kho không đếm/đo/chụp từng kiện — số kiện theo bill,
+        // kích thước, cân do bước cuối cân lại từ ảnh. SoKien (tuỳ chọn) = số kiện kho đếm được, nếu có.
+        g.MapPost("/{id:long}/receive", async (long id, ReceiveRequest r, HttpContext http, PickupDb db, TimeProvider clock, CancellationToken ct) =>
         {
+            if (r.SoKien is < 1 or > 9999) return Bad("Số kiện từ 1 đến 9999.");
             var v = await db.VanDons.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (v is null) return Missing();
             if (v.OrderNumber is > 0) return Results.Conflict(new { error = PrintedMessage });
-            var count = await db.Dims.CountAsync(d => d.MaVanDonId == (int)id, ct);
-            if (count == 0) return Bad("Chưa nhận kiện nào.");
-            var p = await FindPickup(db, id);
-            if (p is null) return Missing();
+            if (await OrderPhotoAsync(db, id, "DIM", ct) is null || await OrderPhotoAsync(db, id, "Other", ct) is null)
+                return Bad("Chụp đủ 2 ảnh (ảnh hàng hoá và ảnh kiện) rồi mới bấm Xong.");
+            var count = r.SoKien;
             var now = clock.GetLocalNow().DateTime;
-            p.PickDateEnd ??= now; p.StaffId = Auth.UserId(http); p.SoKienNhan = count;
-            v.SoKien = count; v.ModifyDate = now.Date; v.ModifyUser = p.StaffId;
+            var p = await FindPickup(db, id);
+            if (p is null) db.Pickups.Add(p = new Pickup { CustomerId = v.CustomerId, SoKienBook = v.SoKien ?? 0, PickDate = now, Note = Code(id) });   // vận đơn nháp tạo từ CRM
+            var sua = p.PickDateEnd is not null;
+            p.PickDateEnd ??= now; p.StaffId = Auth.UserId(http);
+            if (count is { } c) { p.SoKienNhan = c; v.SoKien = c; }
+            v.ModifyDate = now.Date; v.ModifyUser = p.StaffId;
             await InTx(db, async () =>
             {
                 await db.SaveChangesAsync(ct);
-                await AppLog.WriteAsync(db, http, "chot-nhan", Code(id), $"Bấm Xong: kho đã nhận {count} kiện", ct);
+                await AppLog.WriteAsync(db, http, "chot-nhan", Code(id),
+                    $"{(sua ? "Kho lưu lại" : "Kho đã nhận")}, đủ ảnh hàng hoá + ảnh kiện{(count is { } n ? $", {n} kiện" : "")}{(p.SoKienBook > 0 ? $" (khai {p.SoKienBook})" : "")}", ct);
                 return true;
             }, ct);
             return Results.Ok(new { id, trangThai = 2 });

@@ -15,6 +15,7 @@ export interface BookingDetail {
   contactName: string | null; contactPhone: string | null; pickupAddress: string | null; planDate: string | null; tenHang: string | null; note: string | null
   trangThai: number; createDate: string | null; receivedDate: string | null; soKienBook: number; kgDuKien: number | null; orderNumber: number | null
   kiens: BookingKien[]; saleName: string; finishedPhotoId: number | null; khachMoi: string | null
+  soKienNhan: number; goodsPhotoId: number | null
 }
 export interface BookingKien {
   kienSo: number; loai: 'CARTON' | 'TUI'; dai: number; rong: number; cao: number; trongLuong: number; quiDoi: number; chargeWeight: number; hasPhoto: boolean

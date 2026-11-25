@@ -14,14 +14,14 @@ interface ImageRow {
 }
 
 const PAGE_SIZE = 48
-const TYPES = [{ value: '', label: 'Tất cả' }, { value: 'DIM', label: 'Ảnh hàng / kiện' }, { value: 'Other', label: 'Ảnh hoàn thiện' }] as const
+const TYPES = [{ value: '', label: 'Tất cả' }, { value: 'DIM', label: 'Ảnh hàng hoá (DIM)' }, { value: 'Other', label: 'Ảnh kiện đóng gói' }] as const
 const NHAP = [{ value: -1, label: 'Tất cả' }, { value: 0, label: 'Chưa nhập' }, { value: 1, label: 'Đã nhập' }] as const
 const kb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`)
-const typeLabel = (t: string | null) => (t === 'Other' ? 'Hoàn thiện' : 'Ảnh hàng')
+const typeLabel = (t: string | null) => (t === 'Other' ? 'Ảnh kiện' : 'Ảnh hàng')
 const title = (r: ImageRow) => `${r.barcode}${r.kienSo ? ` · kiện ${r.kienSo}` : ''}`
 
 /**
- * Quản lý hình ảnh (AHinhAnh_Order gắn vận đơn): ảnh hàng / kiện (DIM — kho và bước cuối chụp) và ảnh hoàn thiện (Other — gửi khách xem).
+ * Quản lý hình ảnh (AHinhAnh_Order gắn vận đơn): DIM (ảnh hàng hoá của kho, ảnh từng kiện của bước cuối) và Other (ảnh kiện đã đóng gói, gửi khách xem).
  * "Đã nhập" = Status_Nhap 1 (đã có số cân lại). Chỉ xem.
  */
 export default function ImagesPage() {
@@ -38,7 +38,7 @@ export default function ImagesPage() {
 
   return (
     <div className="mx-auto max-w-7xl">
-      <PageHeader title="Hình ảnh" subtitle="Ảnh kho và bước cuối chụp — ảnh hàng / kiện và ảnh hoàn thiện gửi khách." />
+      <PageHeader title="Hình ảnh" subtitle="Ảnh kho chụp (hàng hoá, kiện đóng gói) và ảnh bước cuối cân lại." />
       <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto_auto]">
         <SearchBox value={search} onChange={(v) => { setSearch(v); reset() }} placeholder="Tên khách, mã B…, số bill" label="Tìm ảnh" />
         <DateBox label="Từ" value={from} onChange={(v) => { setFrom(v); reset() }} />
