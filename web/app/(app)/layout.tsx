@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { LogOut, User } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 
@@ -11,13 +12,14 @@ function readName(): string {
   } catch { return '' }
 }
 
-/** Menu của app (chỉ cho kho). Mọi trang (phiếu, nhận tại kho — mở từ nút "Nhận hàng") thuộc "Hàng về kho". */
+/** Menu của app (chỉ cho kho). Trang phiếu, nhận tại kho (mở từ nút "Nhận hàng") thuộc "Hàng về kho". */
 const NAV = [
   { href: '/', label: 'Hàng về kho' },
+  { href: '/hinh-anh', label: 'Hình ảnh' },
 ] as const
 
 function MainNav() {
-  const current = '/'
+  const current = usePathname().startsWith('/hinh-anh') ? '/hinh-anh' : '/'
   return (
     <ul className="flex min-w-0 items-center gap-px overflow-x-auto">
       {NAV.map((n) => (

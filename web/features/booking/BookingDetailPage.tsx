@@ -10,6 +10,7 @@ import { useAction, useApi } from '@/shared/lib/hooks'
 import { fmtDateTime } from '@/shared/lib/format'
 import { BookingStatus, type BookingDetail } from './bookingShared'
 import ReceiveWorkspace from './ReceiveWorkspace'
+import PushedToCms from './PushedToCms'
 
 /** QR chỉ chứa MÃ (B914700): tên khách/nhân viên tra từ DB khi quét, không nhúng thông tin cá nhân vào mã. */
 function useQr(code: string | undefined) {
@@ -34,6 +35,7 @@ export default function BookingDetailPage() {
   const { data: loaded, error: loadError, reload } = useApi<BookingDetail>(`/api/pickup-bookings/${id}`)
   const [fresh, setFresh] = useState<BookingDetail | null>(null)
   const [receiving, setReceiving] = useState(autoReceive)
+  const [pushed, setPushed] = useState(false)   // vừa chốt nhận ⇒ màn "Đã đẩy lên CMS"
   const data = fresh && fresh.id === loaded?.id ? fresh : loaded
   const { run, busy, error } = useAction()
   const qr = useQr(data?.code)
@@ -59,10 +61,12 @@ export default function BookingDetailPage() {
           </div>
           <button type="button" onClick={() => { setReceiving(false); reload() }} className="h-11 shrink-0 rounded-lg px-2 text-[13px] text-primary">Xem phiếu</button>
         </div>
-        <ReceiveWorkspace booking={data} onChange={setFresh} onDone={() => setReceiving(false)} />
+        <ReceiveWorkspace booking={data} onChange={setFresh} onDone={() => { setReceiving(false); setPushed(true) }} />
       </div>
     )
   }
+
+  if (pushed && data.trangThai >= 2) return <PushedToCms booking={data} onView={() => setPushed(false)} />
 
   return (
     <div className="mx-auto max-w-xl pb-24 print:max-w-none print:pb-0">

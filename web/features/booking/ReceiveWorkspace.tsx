@@ -40,6 +40,7 @@ export default function ReceiveWorkspace({ booking, onChange, onDone }: { bookin
   const [flash, setFlash] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
   const typed = useRef(new Set<Key>())
+  const aiSeq = useRef(0)   // lượt đọc AI mới nhất; kết quả lượt cũ về muộn thì bỏ
   const daiBox = useRef<HTMLInputElement>(null)
   const camera = useRef<HTMLInputElement>(null)
   const gallery = useRef<HTMLInputElement>(null)
@@ -59,6 +60,8 @@ export default function ReceiveWorkspace({ booking, onChange, onDone }: { bookin
     setForm(s ? { dai: String(s.dai), rong: String(s.rong), cao: String(s.cao), tl: String(s.trongLuong) } : { ...EMPTY, tl: avg })
     setLoai(s?.loai ?? 'CARTON')
     setPhoto(null)
+    aiSeq.current++   // AI đang đọc ảnh kiện trước ⇒ bỏ kết quả
+    setAiBusy(false)
     setAi(null)
     setAiMsg(null)
     setError(null)
@@ -69,12 +72,14 @@ export default function ReceiveWorkspace({ booking, onChange, onDone }: { bookin
 
   async function analyze(file: File) {
     if (aiOff) return
+    const seq = ++aiSeq.current
     setAiBusy(true)
     setAiMsg(null)
     try {
       const f = new FormData()
       f.append('photo', file)
       const g = await clientUpload<GoiY>('/api/ai/kien-photo', f)
+      if (seq !== aiSeq.current) return   // đã chụp ảnh khác / đổi kiện — bỏ kết quả cũ
       const fill: Partial<Form> = {}
       const fields = new Set<Key>()
       const put = (k: Key, v: number | null) => { if (v != null && !typed.current.has(k)) { fill[k] = String(v); fields.add(k) } }
@@ -84,11 +89,12 @@ export default function ReceiveWorkspace({ booking, onChange, onDone }: { bookin
       setAi({ fields, goiY: g })
       if (fields.size === 0) setAiMsg(g.ghiChu || 'AI không đọc được số đo từ ảnh này — nhập tay.')
     } catch (e) {
+      if (seq !== aiSeq.current) return
       const status = (e as { status?: number }).status
       if (status === 503) aiOff = true
       setAiMsg(status === 503 ? 'AI chưa bật trên máy chủ — nhập tay.' : e instanceof Error ? e.message : 'AI lỗi — nhập tay.')
     } finally {
-      setAiBusy(false)
+      if (seq === aiSeq.current) setAiBusy(false)
     }
   }
 
@@ -98,6 +104,7 @@ export default function ReceiveWorkspace({ booking, onChange, onDone }: { bookin
     if (gallery.current) gallery.current.value = ''
     if (!raw || !raw.type.startsWith('image/')) return
     const file = await shrinkImage(raw)   // nén 1 lần, dùng cho cả AI và lưu
+    typed.current = new Set()   // chụp/chọn ảnh mới = muốn đọc lại ⇒ AI được điền đè cả số cũ; ô gõ tay trong lúc AI đang đọc vẫn giữ
     setPhoto({ file, url: URL.createObjectURL(file) })
     void analyze(file)
   }
@@ -137,7 +144,7 @@ export default function ReceiveWorkspace({ booking, onChange, onDone }: { bookin
       const b = await clientFetch<BookingDetail>(`/api/pickup-bookings/${booking.id}`)
       onChange(b)
       setVersion((v) => v + 1)
-      setFlash(`Đã lưu kiện ${current}${r.daKhai ? ` (${r.daNhan}/${r.daKhai})` : ` (${r.daNhan} kiện)`}`)
+      setFlash(`Đã lưu kiện ${current} lên CMS${r.daKhai ? ` (${r.daNhan}/${r.daKhai})` : ` (${r.daNhan} kiện)`}`)
       if (r.done && !existing && booking.trangThai < 2) onDone()   // vừa đủ số kiện khai ⇒ server đã chốt, về phiếu
       else openKien(b, existing ? current : nextKien(b))
     } catch (e) {

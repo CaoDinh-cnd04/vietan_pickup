@@ -57,7 +57,7 @@ public sealed class KienAi(IConfiguration cfg, ILogger<KienAi> log)
         var body = new
         {
             contents = new[] { new { parts = new object[] { new { inlineData = new { mimeType = mediaType, data = Convert.ToBase64String(image) } }, new { text = Prompt } } } },
-            generationConfig = new { responseMimeType = "application/json", responseJsonSchema = Schema, thinkingConfig = new { thinkingLevel = "medium" } },   // medium: low đọc sai chữ ghi tay xấu (12→42, bỏ sót số)
+            generationConfig = new { responseMimeType = "application/json", responseJsonSchema = Schema, thinkingConfig = new { thinkingLevel = "low" } },   // low cho nhanh (medium đọc chữ ghi tay xấu chuẩn hơn nhưng chậm) — người kho vẫn kiểm trước khi lưu
         };
         using var msg = new HttpRequestMessage(HttpMethod.Post, $"https://generativelanguage.googleapis.com/v1beta/models/{Model}:generateContent")
         {

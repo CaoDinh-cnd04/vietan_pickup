@@ -27,7 +27,7 @@ Trạng thái (suy ra, không lưu): Chờ lấy (chưa kiện nào) · Đang nh
 Đăng nhập dùng bảng `USERS` theo luật legacy (ngoài giờ → STATUS=ACTIVE → bcrypt / MD5-lossy / plaintext), **không ghi ngược** vào `USERS`.
 
 ## AI đọc ảnh kiện
-`POST /api/ai/kien-photo` (`api/KienAi.cs`) gửi ảnh (đã nén ở trình duyệt) tới Gemini (`gemini-3.5-flash`, thinking medium để đọc chữ ghi tay), nhận JSON: dài/rộng/cao, cân, loại thùng/túi, nguồn số đo, ghi chú.
+`POST /api/ai/kien-photo` (`api/KienAi.cs`) gửi ảnh (đã nén ở trình duyệt) tới Gemini (`gemini-3.5-flash`, thinking low cho nhanh), nhận JSON: dài/rộng/cao, cân, loại thùng/túi, nguồn số đo, ghi chú.
 - **Cân** chỉ điền khi đọc được số trên màn hình cân trong ảnh — ảnh không cho biết khối lượng.
 - **Kích thước**: đọc thước/nhãn nếu có, không thì *ước lượng* (ô gắn nhãn "AI ước lượng").
 - Ô AI điền có viền vàng + nhãn "AI"; người kho sửa ô nào thì nhãn ô đó mất. Không bao giờ tự lưu.
