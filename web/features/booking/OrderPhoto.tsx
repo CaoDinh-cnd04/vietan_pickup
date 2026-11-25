@@ -1,18 +1,17 @@
 'use client'
 import { useRef, useState } from 'react'
-import { Camera, ImageUp, Loader2, Package, PackageCheck } from 'lucide-react'
+import { Camera, ImageUp, Loader2, PackageCheck } from 'lucide-react'
 import { imageUrl } from '@/shared/kit/Admin'
 import { clientUpload } from '@/shared/lib/api'
 import { shrinkImage } from '@/shared/lib/image'
 
 const KINDS = {
-  hang: { title: 'Ảnh hàng hoá', empty: 'Chụp hàng lúc nhận (chưa đóng).', done: 'Đã có ảnh hàng hoá.', Icon: Package },
   kien: { title: 'Ảnh kiện', empty: 'Kiện đã đóng gói xong, chụp gửi khách xem.', done: 'Đã có — gửi khách xem.', Icon: PackageCheck },
 } as const
 
 /**
- * Ảnh theo đơn của kho (1 tấm/loại, chụp là tải lên ngay, chụp lại thay ảnh cũ):
- * "hang" = ảnh hàng hoá (lưu loại DIM), "kien" = ảnh kiện đã đóng gói, gửi khách xem (loại Other). Kho KHÔNG chụp từng kiện / AI — việc đó ở bước cuối.
+ * Ảnh kiện đã đóng gói, gửi khách xem (loại Other) — 1 tấm/đơn, chụp là tải lên ngay, chụp lại thay ảnh cũ.
+ * Ảnh hàng hoá (nhiều tấm) ở GoodsPhotos. Kho KHÔNG chụp từng kiện / AI — việc đó ở bước cuối.
  */
 export default function OrderPhoto({ bookingId, kind, photoId, onUploaded }: { bookingId: number; kind: keyof typeof KINDS; photoId: number | null; onUploaded: () => void }) {
   const camera = useRef<HTMLInputElement>(null)

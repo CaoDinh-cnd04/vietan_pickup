@@ -31,3 +31,4 @@ async function proxy(req: NextRequest): Promise<NextResponse> {
 
 export const GET = proxy
 export const POST = proxy
+export const DELETE = proxy

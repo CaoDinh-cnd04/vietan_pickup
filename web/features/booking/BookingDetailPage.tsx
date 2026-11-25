@@ -101,9 +101,9 @@ export default function BookingDetailPage() {
           <Row k="Ghi chú" v={data.note} />
         </dl>
 
-        {(data.goodsPhotoId || data.finishedPhotoId) && (
-          <div className="mt-4 flex gap-3 print:hidden">
-            {([['Ảnh hàng hoá', data.goodsPhotoId], ['Ảnh kiện', data.finishedPhotoId]] as const).map(([t, pid]) => pid && (
+        {(data.goodsPhotoIds.length > 0 || data.finishedPhotoId) && (
+          <div className="mt-4 flex flex-wrap gap-3 print:hidden">
+            {[...data.goodsPhotoIds.map((pid, i) => [`Hàng hoá ${i + 1}`, pid] as const), ['Ảnh kiện', data.finishedPhotoId] as const].map(([t, pid]) => pid && (
               <a key={t} href={imageUrl(pid)} target="_blank" rel="noreferrer" className="text-center text-[12px] text-text-muted">
                 {/* eslint-disable-next-line @next/next/no-img-element -- ảnh qua proxy có cookie */}
                 <img src={imageUrl(pid)} alt={t} className="mb-1 h-24 w-24 rounded-lg border border-border object-cover" />{t}

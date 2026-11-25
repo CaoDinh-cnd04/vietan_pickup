@@ -1,3 +1,11 @@
+/** Lỗi không kèm lời nhắn: nói rõ theo mã HTTP (404 thường là API chưa cập nhật bản mới). */
+function statusMessage(status: number): string {
+  if (status === 404) return 'Máy chủ chưa có chức năng này (404) — cần khởi động lại / deploy API bản mới.'
+  if (status === 413) return 'Ảnh quá lớn (413).'
+  if (status >= 500) return `Máy chủ lỗi (${status}) — thử lại sau.`
+  return `Lỗi ${status}`
+}
+
 export async function clientFetch<T>(
   path: string,
   options: RequestInit = {}
@@ -19,7 +27,7 @@ export async function clientFetch<T>(
     }
     // Backend trả ValidationProblem ({ errors: { field: [msg] } }), Conflict ({ error }) hoặc { message }
     const firstValidation = err.errors ? Object.values(err.errors as Record<string, string[]>)[0]?.[0] : undefined
-    throw Object.assign(new Error(err.message ?? err.error ?? firstValidation ?? err.title ?? 'Lỗi không xác định'), {
+    throw Object.assign(new Error(err.message ?? err.error ?? firstValidation ?? err.title ?? statusMessage(res.status)), {
       status: res.status,
       body: err,
     })
@@ -37,7 +45,7 @@ export async function clientUpload<T>(path: string, form: FormData): Promise<T> 
   if (!res.ok) {
     if (res.status === 401 && typeof window !== 'undefined') window.location.href = '/login?expired=1'
     const firstValidation = json.errors ? Object.values(json.errors as Record<string, string[]>)[0]?.[0] : undefined
-    throw Object.assign(new Error(json.message ?? json.error ?? firstValidation ?? json.title ?? 'Lỗi không xác định'), { status: res.status, body: json })
+    throw Object.assign(new Error(json.message ?? json.error ?? firstValidation ?? json.title ?? statusMessage(res.status)), { status: res.status, body: json })
   }
   return json as T
 }

@@ -24,6 +24,7 @@ public static class AppLog
         ["anh-hang"] = "Ảnh hàng hoá",
         ["anh-hoan-thien"] = "Ảnh hoàn thiện",
         ["anh-kien"] = "Ảnh kiện (đóng gói)",
+        ["xoa-anh"] = "Xoá ảnh",
         ["can-lai"] = "Cân lại kiện (bước cuối)",
     };
 

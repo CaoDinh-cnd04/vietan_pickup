@@ -12,7 +12,7 @@ import { KhachName, type BookingDetail } from './bookingShared'
  * App ghi thẳng DB của CMS lúc chụp ảnh / chốt — màn này chỉ xác nhận, không gửi thêm gì.
  */
 export default function PushedToCms({ booking, onView }: { booking: BookingDetail; onView: () => void }) {
-  const photos = [['Ảnh hàng hoá', booking.goodsPhotoId], ['Ảnh kiện', booking.finishedPhotoId]] as const
+  const photos = [...booking.goodsPhotoIds.map((pid, i) => [`Hàng hoá ${i + 1}`, pid] as const), ['Ảnh kiện', booking.finishedPhotoId] as const]
 
   return (
     <div className="mx-auto max-w-xl pb-28">
@@ -25,10 +25,10 @@ export default function PushedToCms({ booking, onView }: { booking: BookingDetai
       <Card className="mb-3" title="Đã ghi">
         <ul className="space-y-3 text-[14px]">
           <Item title={`Vận đơn nháp ${booking.code}`} table="MaVanDon" detail={booking.soKienBook ? `Khai ${booking.soKienBook} kiện` : 'Số kiện theo bill'} />
-          <Item title="Ảnh hàng hoá + ảnh kiện" table="AHinhAnh_Order (DIM, Other)" detail="Ảnh kiện gửi khách xem" />
+          <Item title={`${booking.goodsPhotoIds.length} ảnh hàng hoá + ảnh kiện`} table="AHinhAnh_Order (DIM, Other)" detail="Ảnh kiện gửi khách xem" />
           <Item title="Kho đã nhận" table="Pickup" detail={booking.receivedDate ? fmtDateTime(booking.receivedDate) : 'Đã chốt'} />
         </ul>
-        <div className="mt-3 flex gap-3">
+        <div className="mt-3 flex flex-wrap gap-3">
           {photos.map(([t, pid]) => pid && (
             <div key={t} className="text-center text-[12px] text-text-muted">
               {/* eslint-disable-next-line @next/next/no-img-element -- ảnh qua proxy có cookie */}
