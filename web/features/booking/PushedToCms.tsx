@@ -5,7 +5,7 @@ import { Card } from '@/shared/kit/Page'
 import { Btn } from '@/shared/kit/Fields'
 import { fmtDateTime, fmtNumber } from '@/shared/lib/format'
 import { cn } from '@/shared/lib/utils'
-import type { BookingDetail } from './bookingShared'
+import { KhachName, type BookingDetail } from './bookingShared'
 
 /**
  * Bước sau khi lưu kiện cuối (tự chốt hoặc bấm Xong): tóm tắt những gì đã ghi vào bảng dùng chung với CMS/CRM.
@@ -22,7 +22,7 @@ export default function PushedToCms({ booking, onView }: { booking: BookingDetai
       <div className="mb-4 flex flex-col items-center gap-1 pt-2 text-center">
         <CheckCircle2 size={48} className="text-success" aria-hidden />
         <h1 className="text-[20px] font-bold text-text-primary">Đã đẩy lên CMS</h1>
-        <p className="text-[14px] text-text-secondary">{booking.code} · {booking.customerName ?? '(không tên khách)'}</p>
+        <p className="text-[14px] text-text-secondary">{booking.code} · <KhachName b={booking} /></p>
       </div>
 
       <Card className="mb-3" title="Đã ghi">

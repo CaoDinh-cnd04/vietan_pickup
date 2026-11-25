@@ -9,7 +9,7 @@ import { clientFetch } from '@/shared/lib/api'
 import { useApi, qs, type Paged } from '@/shared/lib/hooks'
 import { fmtDateTime, todayInput } from '@/shared/lib/format'
 import { cn } from '@/shared/lib/utils'
-import { BookingStatus, type BookingRow, type PickupRow } from './bookingShared'
+import { BookingStatus, KhachName, type BookingRow, type PickupRow } from './bookingShared'
 
 const PAGE_SIZE = 25
 /** Mã quét: B<ID>[/kiện] (vận đơn nháp) hoặc số bill 7 số. */
@@ -112,7 +112,7 @@ export default function BookingsPage() {
             <button type="button" onClick={() => router.push(`/${b.id}?nhan=1`)}
               className="flex min-h-[72px] w-full items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5 text-left active:bg-primary-light">
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15.5px] font-semibold text-text-primary">{b.customerName ?? '(không tên khách)'}</span>
+                <span className="block truncate text-[15.5px] font-semibold text-text-primary"><KhachName b={b} /></span>
                 {b.saleName && <span className="block truncate text-[13px] text-text-secondary">NV: {b.saleName}</span>}
                 <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                   <BookingStatus value={b.trangThai} nhan={b.soKienNhan} khai={b.soKienBook} />

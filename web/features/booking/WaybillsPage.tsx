@@ -5,7 +5,7 @@ import { ErrorBox, PageHeader } from '@/shared/kit/Page'
 import { DataTable, DateBox, Pager, SearchBox, SelectBox } from '@/shared/kit/Admin'
 import { useApi, qs, type Paged } from '@/shared/lib/hooks'
 import { fmtDate, fmtNumber, todayInput } from '@/shared/lib/format'
-import { BookingStatus, type BookingRow } from './bookingShared'
+import { BookingStatus, KhachName, type BookingRow } from './bookingShared'
 
 const PAGE_SIZE = 50
 const STATUS = [
@@ -42,7 +42,7 @@ export default function WaybillsPage() {
           <tr key={b.id} onClick={() => router.push(`/${b.id}`)} className="cursor-pointer hover:bg-primary-light/60">
             <td className="whitespace-nowrap font-semibold text-primary">{b.code}</td>
             <td className="whitespace-nowrap font-medium">{b.orderNumber ?? <span className="text-text-muted">—</span>}</td>
-            <td className="max-w-[240px] truncate">{b.customerName ?? '—'}</td>
+            <td className="max-w-[260px] truncate"><KhachName b={b} fallback="—" /></td>
             <td className="whitespace-nowrap">{b.saleName || '—'}</td>
             <td><BookingStatus value={b.trangThai} nhan={b.soKienNhan} khai={b.soKienBook} /></td>
             <td className="whitespace-nowrap text-right">{b.soKienNhan}{b.soKienBook ? `/${b.soKienBook}` : ''}</td>

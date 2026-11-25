@@ -3,14 +3,15 @@ using Microsoft.EntityFrameworkCore;
 namespace VietAnPickup;
 
 public sealed record CreateBookingRequest(long CustomerId, int SoKien = 0, decimal? KgDuKien = null, string? TenHang = null, string? ContactName = null,
-    string? ContactPhone = null, string? PickupAddress = null, DateTime? PlanDate = null, string? Note = null, bool TaiKho = false);
+    string? ContactPhone = null, string? PickupAddress = null, DateTime? PlanDate = null, string? Note = null, bool TaiKho = false,
+    string? KhachMoi = null);   // KhachMoi: tên khách thật khi chưa có hồ sơ — vận đơn tạo dưới tài khoản giữ chỗ của sale (CustomerId)
 
 public sealed record KienDto(int KienSo, string Loai, int Dai, int Rong, int Cao, decimal TrongLuong, decimal QuiDoi, decimal ChargeWeight, bool HasPhoto);
 public sealed record RowDto(long Id, string Code, long? CustomerId, string? CustomerName, string StaffName, DateTime? PlanDate, int TrangThai,
-    DateTime? CreateDate, int SoKienBook, int SoKienNhan, decimal? Kg, string? TenHang, long? OrderNumber, string SaleName);
+    DateTime? CreateDate, int SoKienBook, int SoKienNhan, decimal? Kg, string? TenHang, long? OrderNumber, string SaleName, string? KhachMoi);
 public sealed record DetailDto(long Id, string Code, long? CustomerId, string? CustomerName, string? CustomerPhone, string StaffName,
     string? ContactName, string? ContactPhone, string? PickupAddress, DateTime? PlanDate, string? TenHang, string? Note, int TrangThai, DateTime? CreateDate,
-    DateTime? ReceivedDate, int SoKienBook, decimal? KgDuKien, long? OrderNumber, IReadOnlyList<KienDto> Kiens, string SaleName, long? FinishedPhotoId);
+    DateTime? ReceivedDate, int SoKienBook, decimal? KgDuKien, long? OrderNumber, IReadOnlyList<KienDto> Kiens, string SaleName, long? FinishedPhotoId, string? KhachMoi);
 
 /// <summary>
 /// Book pickup + kho nhận hàng trên BẢNG CRM (không bảng riêng):
@@ -53,6 +54,14 @@ public static class Bookings
         : h.Length >= 12 && h[..4].SequenceEqual("RIFF"u8) && h[8..12].SequenceEqual("WEBP"u8) ? "image/webp"
         : null;
 
+    /// <summary>
+    /// Tài khoản "tạo bill" giữ chỗ của sale (TCustomer tên bắt đầu "=", vd "=====(VA Bình Dương)") — công ty dùng cho khách chưa có hồ sơ.
+    /// Vận đơn của khách mới: CustomerName = tên tài khoản giữ chỗ, SenderName = tên khách thật ⇒ trả tên khách thật để hiển thị.
+    /// </summary>
+    internal static bool IsPlaceholder(string? customerName) => customerName?.TrimStart().StartsWith('=') ?? false;
+    internal static string? KhachMoiOf(string? customerName, string? senderName) =>
+        IsPlaceholder(customerName) && !string.IsNullOrWhiteSpace(senderName) && !IsPlaceholder(senderName) ? senderName.Trim() : null;
+
     internal static int StatusOf(long? orderNumber, DateTime? receivedDate, int dims) => orderNumber is > 0 ? 3 : receivedDate is not null ? 2 : dims > 0 ? 1 : 0;
 
     private static IResult Bad(string msg) => Results.BadRequest(new { error = msg });
@@ -80,6 +89,8 @@ public static class Bookings
         if (r.CustomerId <= 0) e["customerId"] = ["Chọn khách hàng."];
         if (r.TaiKho ? r.SoKien is < 0 or > 9999 : r.SoKien is < 1 or > 9999) e["soKien"] = ["Số kiện từ 1 đến 9999."];
         if (r.KgDuKien is < 0 or > 99999) e["kgDuKien"] = ["Cân dự kiến từ 0 đến 99999 kg."];
+        if (r.KhachMoi is not null && (string.IsNullOrWhiteSpace(r.KhachMoi) || string.IsNullOrWhiteSpace(r.ContactPhone))) e["khachMoi"] = ["Khách mới: nhập tên và số điện thoại."];
+        if ((r.KhachMoi?.Length ?? 0) > 200) e["khachMoi"] = ["Tên khách quá dài."];
         if ((r.TenHang?.Length ?? 0) > 300 || (r.ContactName?.Length ?? 0) > 200 || (r.ContactPhone?.Length ?? 0) > 100
             || (r.PickupAddress?.Length ?? 0) > 1000 || (r.Note?.Length ?? 0) > 250)
             e["text"] = ["Tên hàng, liên hệ, địa chỉ hoặc ghi chú quá dài."];
@@ -106,7 +117,7 @@ public static class Bookings
         return Results.Ok(new DetailDto(v.Id, Code(v.Id), v.CustomerId, c?.CustomerName ?? v.CustomerName, c?.Phone ?? c?.Tel, Auth.StaffName(u),
             v.SenderContactName, v.SenderPhone, v.SenderAddress, v.PickupEst, v.TenHang, UserNote(id, p?.Note),
             StatusOf(v.OrderNumber, p?.PickDateEnd, dims.Count), p?.PickDate ?? v.CreateDate, p?.PickDateEnd,
-            p?.SoKienBook ?? v.SoKien ?? 0, dims.Count == 0 ? v.TrongLuong : null, v.OrderNumber, kiens, Auth.StaffName(sale), finished?.Id));
+            p?.SoKienBook ?? v.SoKien ?? 0, dims.Count == 0 ? v.TrongLuong : null, v.OrderNumber, kiens, Auth.StaffName(sale), finished?.Id, KhachMoiOf(v.CustomerName, v.SenderName)));
     }
 
     /// <summary>Ảnh hoàn thiện (gửi khách xem) của vận đơn: ImageType "Other", 1 tấm/đơn, có dữ liệu trong AHinhAnh_Order_Data.</summary>
@@ -127,6 +138,21 @@ public static class Bookings
             return Results.Ok(new { items });
         }).RequireAuthorization();
 
+        // Tài khoản tạo bill (giữ chỗ) của từng sale — chọn khi khách mới chưa có hồ sơ.
+        app.MapGet("/api/placeholder-accounts", async (PickupDb db, CancellationToken ct) =>
+        {
+            var rows = await db.Customers.AsNoTracking().Where(c => c.IsDeleted != true && c.CustomerName!.StartsWith("="))
+                .Select(c => new { c.CustomerID, c.CustomerCode, c.CustomerName, c.StaffId }).ToListAsync(ct);
+            var sids = rows.Select(r => r.StaffId).OfType<int>().Distinct().ToList();
+            var users = await db.Users.AsNoTracking().Where(u => sids.Contains(u.Id)).ToDictionaryAsync(u => u.Id, ct);
+            var items = rows.Select(r => new
+            {
+                customerId = r.CustomerID, customerName = r.CustomerName, customerCode = r.CustomerCode,
+                saleName = r.StaffId is { } sid ? Auth.StaffName(users.GetValueOrDefault(sid)) : "",
+            }).OrderBy(x => x.saleName == "" ? 1 : 0).ThenBy(x => x.saleName).ThenBy(x => x.customerName).ToList();
+            return Results.Ok(new { items });
+        }).RequireAuthorization();
+
         // Book pickup (hoặc khách mang tới kho): vận đơn nháp + dòng Pickup, cùng 1 transaction.
         g.MapPost("", async (CreateBookingRequest r, PickupDb db, HttpContext http, TimeProvider clock, CancellationToken ct) =>
         {
@@ -134,6 +160,9 @@ public static class Bookings
             var cust = await db.Customers.AsNoTracking().Where(c => c.CustomerID == r.CustomerId)
                 .Select(c => new { c.CustomerName, c.ContactName, c.ContactPhone, c.Phone, c.Tel, c.Address1, c.StaffId }).FirstOrDefaultAsync(ct);
             if (cust is null) return Results.ValidationProblem(new Dictionary<string, string[]> { ["customerId"] = ["Không tìm thấy khách hàng."] });
+            if (r.KhachMoi is not null && !IsPlaceholder(cust.CustomerName))
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["customerId"] = ["Khách mới phải tạo dưới tài khoản tạo bill (giữ chỗ) của sale."] });
+            var khachMoi = r.KhachMoi?.Trim();
 
             static string? Pick(string? typed, params string?[] fallback) =>
                 !string.IsNullOrWhiteSpace(typed) ? typed.Trim() : fallback.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x))?.Trim();
@@ -142,9 +171,11 @@ public static class Bookings
             var v = new MaVanDon
             {
                 // Như CRM tạo vận đơn nháp: Status=1, AWB="", CustomerName = SenderName = tên khách, Customer_Staff_ID = NV phụ trách khách.
-                CustomerId = r.CustomerId, Status = 1, Awb = "", ConsigneeEmail = "", CustomerName = cust.CustomerName, SenderName = cust.CustomerName,
-                SenderContactName = Pick(r.ContactName, cust.ContactName), SenderPhone = Pick(r.ContactPhone, cust.ContactPhone, cust.Phone, cust.Tel),
-                SenderAddress = r.TaiKho ? null : Pick(r.PickupAddress, cust.Address1), PickupEst = r.TaiKho ? now : r.PlanDate,
+                // Khách mới: CustomerID = tài khoản giữ chỗ của sale, SenderName/liên hệ = khách thật (không lấy SĐT/địa chỉ của tài khoản giữ chỗ).
+                CustomerId = r.CustomerId, Status = 1, Awb = "", ConsigneeEmail = "", CustomerName = cust.CustomerName, SenderName = khachMoi ?? cust.CustomerName,
+                SenderContactName = khachMoi ?? Pick(r.ContactName, cust.ContactName),
+                SenderPhone = khachMoi is not null ? r.ContactPhone!.Trim() : Pick(r.ContactPhone, cust.ContactPhone, cust.Phone, cust.Tel),
+                SenderAddress = khachMoi is not null ? r.PickupAddress?.Trim() : r.TaiKho ? null : Pick(r.PickupAddress, cust.Address1), PickupEst = r.TaiKho ? now : r.PlanDate,
                 TenHang = r.TenHang?.Trim(), SoKien = r.SoKien > 0 ? r.SoKien : null, TrongLuong = r.KgDuKien,
                 CustomerStaffId = cust.StaffId, CreateUser = uid, ModifyUser = uid, CreateDate = now.Date, ModifyDate = now.Date,
             };
@@ -154,7 +185,7 @@ public static class Bookings
                 await db.SaveChangesAsync(ct);
                 db.Pickups.Add(new Pickup { StaffId = uid, CustomerId = r.CustomerId, SoKienBook = r.SoKien, SoKienNhan = 0, PickDate = now, Note = NoteOf(v.Id, r.Note) });
                 await db.SaveChangesAsync(ct);
-                await AppLog.WriteAsync(db, http, "tao-tai-kho", Code(v.Id), $"Tạo vận đơn {Code(v.Id)} cho khách {cust.CustomerName}", ct);
+                await AppLog.WriteAsync(db, http, "tao-tai-kho", Code(v.Id), khachMoi is null ? $"Tạo vận đơn {Code(v.Id)} cho khách {cust.CustomerName}" : $"Tạo vận đơn {Code(v.Id)} cho KHÁCH MỚI {khachMoi} ({v.SenderPhone}) dưới tài khoản {cust.CustomerName}", ct);
                 return true;
             }, ct);
             return Results.Created($"/api/pickup-bookings/{v.Id}", new { id = v.Id, code = Code(v.Id) });
@@ -176,8 +207,8 @@ public static class Bookings
                     where m.CreateDate >= dateFrom && m.CreateDate <= dateTo && (m.OrderNumber == null || pk != null)
                           && (status == -1 || st == status)
                           && (@group != "can" || st < 2) && (@group != "xong" || st >= 2)   // nhóm cho kho: cần nhận (0,1) · đã nhận (2,3)
-                          && (s == "" || (codeId != null && m.Id == codeId) || (codeOn != null && m.OrderNumber == codeOn) || m.CustomerName!.Contains(s) || m.TenHang!.Contains(s))
-                    select new { m.Id, m.CustomerId, m.CustomerName, m.CreateUser, m.PickupEst, m.CreateDate, m.SoKien, m.TrongLuong, m.TenHang, m.OrderNumber,
+                          && (s == "" || (codeId != null && m.Id == codeId) || (codeOn != null && m.OrderNumber == codeOn) || m.CustomerName!.Contains(s) || m.SenderName!.Contains(s) || m.TenHang!.Contains(s))
+                    select new { m.Id, m.CustomerId, m.CustomerName, m.SenderName, m.CreateUser, m.PickupEst, m.CreateDate, m.SoKien, m.TrongLuong, m.TenHang, m.OrderNumber,
                                  PickDate = (DateTime?)pk!.PickDate, SoKienBook = (int?)pk!.SoKienBook, St = st, Dims = dims,
                                  SaleId = m.CustomerStaffId > 0 ? m.CustomerStaffId : db.Customers.Where(c => c.CustomerID == m.CustomerId).Select(c => (long?)c.StaffId).FirstOrDefault() };   // NV phụ trách khách
             var total = await q.CountAsync(ct);
@@ -186,7 +217,7 @@ public static class Bookings
             var users = await db.Users.AsNoTracking().Where(u => uids.Contains(u.Id)).ToDictionaryAsync(u => u.Id, ct);
             var items = rows.Select(x => new RowDto(x.Id, Code(x.Id), x.CustomerId, x.CustomerName, Auth.StaffName(x.CreateUser is { } cu ? users.GetValueOrDefault(cu) : null),
                 x.PickupEst, x.St, x.PickDate ?? x.CreateDate, x.SoKienBook ?? x.SoKien ?? 0, x.Dims, x.TrongLuong, x.TenHang, x.OrderNumber,
-                Auth.StaffName(x.SaleId is { } si ? users.GetValueOrDefault((int)si) : null))).ToList();
+                Auth.StaffName(x.SaleId is { } si ? users.GetValueOrDefault((int)si) : null), KhachMoiOf(x.CustomerName, x.SenderName))).ToList();
             return Results.Ok(new { items, page = p0, pageSize = size, totalCount = total });
         });
 

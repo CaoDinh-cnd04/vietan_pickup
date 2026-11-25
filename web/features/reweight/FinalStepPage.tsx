@@ -38,6 +38,7 @@ export default function FinalStepPage() {
   const [error, setError] = useState<string | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const typed = useRef(new Set<Key>())
   const aiSeq = useRef(0)
   const scanBox = useRef<HTMLInputElement>(null)
@@ -190,7 +191,9 @@ export default function FinalStepPage() {
             </div>
           </Card>
 
-          <Card>
+          <Card className={cn(dragging && 'ring-2 ring-primary')}>
+            <div onDragOver={(e) => { e.preventDefault(); setDragging(true) }} onDragLeave={() => setDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); void pick(e.dataTransfer.files) }}>
             <p className="mb-2 text-[20px] font-bold text-text-primary">Kiện {current}<span className="text-text-muted"> / {bill.soKien}</span></p>
             {kien?.kho && (
               <p className="mb-2 text-[13px] text-text-secondary">Kho đo: {kien.kho.dai}×{kien.kho.rong}×{kien.kho.cao} cm · {fmtNumber(kien.kho.trongLuong)} kg · tính cước {fmtNumber(kien.kho.chargeWeight)} kg</p>
@@ -210,10 +213,13 @@ export default function FinalStepPage() {
                   ? <img src={imageUrl(kien.idHinh)} alt={`Ảnh kiện ${current} đã lưu`} className="h-20 w-20 shrink-0 rounded-lg border border-border object-cover" />
                   : null}
               <Btn type="button" variant={hasPhoto ? 'outline' : 'primary'} className="h-14 flex-1 text-[15px]" onClick={() => camera.current?.click()}>
-                <Camera size={20} /> {hasPhoto ? 'Chụp lại' : 'Chụp ảnh kiện'}
+                <Camera size={20} /> {hasPhoto ? 'Chụp lại' : 'Chụp ảnh'}
               </Btn>
-              <Btn type="button" variant="outline" className="h-14 w-14 px-0" aria-label="Chọn ảnh có sẵn" onClick={() => gallery.current?.click()}><ImageUp size={20} /></Btn>
+              <Btn type="button" variant="outline" className="h-14 flex-1 text-[15px]" onClick={() => gallery.current?.click()}>
+                <ImageUp size={20} /> Tải ảnh lên
+              </Btn>
             </div>
+            <p className="-mt-1 mb-2 hidden text-[12px] text-text-muted sm:block">Hoặc kéo thả ảnh vào khung này.</p>
             {aiBusy && <p className="mb-2 flex items-center gap-2 text-[13px] text-amber-700"><Sparkles size={16} className="animate-pulse" aria-hidden /> AI đang đọc số trên thùng…</p>}
             {aiMsg && !aiBusy && <p className="mb-2 text-[13px] text-text-secondary">{aiMsg}</p>}
             {kien?.idHinh && !kien.hasPhoto && !photo && <p className="mb-2 text-[12.5px] text-text-muted">Kiện có ảnh cũ (hệ cũ, không xem được ở đây) — chụp ảnh mới để thay.</p>}
@@ -221,13 +227,14 @@ export default function FinalStepPage() {
             <div className="grid grid-cols-2 gap-3">
               {num('dai', 'Dài (cm)')}{num('rong', 'Rộng (cm)')}{num('cao', 'Cao (cm)')}{num('tl', 'Cân (kg)')}
             </div>
+            </div>
           </Card>
 
           <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface p-3 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom))]">
             <div className="mx-auto max-w-xl">
               <Btn type="button" className="h-14 w-full text-[16px]" disabled={!valid || !hasPhoto || busy} onClick={save}>
                 {busy ? <Loader2 className="animate-spin" size={18} /> : <Check size={18} />}
-                {busy ? 'Đang lưu…' : !hasPhoto ? 'Chụp ảnh kiện trước' : `Lưu kiện ${current} lên CMS`}
+                {busy ? 'Đang lưu…' : !hasPhoto ? 'Chụp hoặc tải ảnh kiện trước' : `Lưu kiện ${current} lên CMS`}
               </Btn>
             </div>
           </div>

@@ -38,6 +38,10 @@ public static class Reweight
 {
     private const string Cols = "ID, ID_Hinh, OrderNumber, Kien_So, Dai, Rong, Cao, TrongLuong, QuiDoi, ChargeWeight, UserID, ISNULL(Update_Date, Create_Date) AS At";
 
+    /// <summary>Khách mới (tài khoản giữ chỗ của sale) ⇒ tên khách thật kèm "(khách mới)".</summary>
+    private static string? ShownName(string? customerName, string? senderName) =>
+        Bookings.KhachMoiOf(customerName, senderName) is { } k ? $"{k} (khách mới)" : customerName;
+
     private static IResult Bad(string msg) => Results.BadRequest(new { error = msg });
 
     /// <summary>"6193393/1", "6193393_1", "6193393" (số bill 7 số) hoặc "B914708[/1]" (vận đơn đã có bill).</summary>
@@ -81,7 +85,7 @@ public static class Reweight
             return new RwKienDto(k, img?.Id, img?.HasData ?? false, d is null ? null : new DimDto(d.Dai, d.Rong, d.Cao, d.TrongLuong, d.QuiDoi, d.ChargeWeight),
                 rw is null ? null : ToRw(rw, users));
         }).ToList();
-        return Results.Ok(new RwBillDto(on, v.Id, Bookings.Code(v.Id), v.CustomerName, soKien, kienScan, kiens));
+        return Results.Ok(new RwBillDto(on, v.Id, Bookings.Code(v.Id), ShownName(v.CustomerName, v.SenderName), soKien, kienScan, kiens));
     }
 
     public static void Map(IEndpointRouteBuilder app)
@@ -164,7 +168,7 @@ public static class Reweight
 
             var onList = all.Select(r => long.TryParse(r.OrderNumber, out var n) ? n : 0).Where(n => n > 0).Distinct().ToList();
             var bills = await db.VanDons.AsNoTracking().Where(m => m.OrderNumber != null && onList.Contains(m.OrderNumber.Value))
-                .Select(m => new { m.Id, OrderNumber = m.OrderNumber!.Value, m.CustomerName }).ToListAsync(ct);
+                .Select(m => new { m.Id, OrderNumber = m.OrderNumber!.Value, m.CustomerName, m.SenderName }).ToListAsync(ct);
             var bill = bills.GroupBy(b => b.OrderNumber).ToDictionary(x => x.Key, x => x.OrderByDescending(b => b.Id).First());
             var mvdIds = bill.Values.Select(b => (int)b.Id).ToList();
             var dims = (await db.Dims.AsNoTracking().Where(d => mvdIds.Contains(d.MaVanDonId)).OrderBy(d => d.Id).ToListAsync(ct)).GroupBy(d => d.MaVanDonId).ToDictionary(x => x.Key, x => x.ToList());
@@ -178,7 +182,7 @@ public static class Reweight
                 var d = b is not null && dims.TryGetValue((int)b.Id, out var ds) && r.Kien_So >= 1 && r.Kien_So <= ds.Count ? ds[r.Kien_So - 1] : null;
                 var kho = d is null ? null : new DimDto(d.Dai, d.Rong, d.Cao, d.TrongLuong, d.QuiDoi, d.ChargeWeight);
                 decimal? diff = kho?.ChargeWeight is { } k && r.ChargeWeight is { } c ? c - k : null;
-                return new RwRowDto(r.ID, r.ID_Hinh, withData.Contains(r.ID_Hinh), r.OrderNumber, r.Kien_So, b?.Id, b?.CustomerName, ToRw(r, users), kho, diff);
+                return new RwRowDto(r.ID, r.ID_Hinh, withData.Contains(r.ID_Hinh), r.OrderNumber, r.Kien_So, b?.Id, ShownName(b?.CustomerName, b?.SenderName), ToRw(r, users), kho, diff);
             }).Where(x => lech == 0 || (x.Lech is { } l && Math.Abs(l) >= 0.5m)).ToList();
             return Results.Ok(new { items = rows.Skip((p0 - 1) * size).Take(size), page = p0, pageSize = size, totalCount = rows.Count });
         });
