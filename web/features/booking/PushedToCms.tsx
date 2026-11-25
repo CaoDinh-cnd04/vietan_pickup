@@ -32,6 +32,8 @@ export default function PushedToCms({ booking, onView }: { booking: BookingDetai
           <Item ok title={`Kích thước ${ks.length} kiện`} table="MaVanDon_PCS_DIM" detail="Dài × rộng × cao, quy đổi, cân tính cước" />
           <Item ok={coAnh === ks.length} title={`Ảnh ${coAnh}/${ks.length} kiện`} table="AHinhAnh_Order"
             detail={coAnh === ks.length ? 'Đủ ảnh mỗi kiện' : `Thiếu ảnh ${ks.length - coAnh} kiện — bấm "Xem phiếu" để chụp bổ sung`} />
+          <Item ok={booking.finishedPhotoId != null} title="Ảnh hoàn thiện" table="AHinhAnh_Order (Other)"
+            detail={booking.finishedPhotoId != null ? 'Đã có — gửi khách xem' : 'Chưa chụp — bấm "Xem phiếu" để chụp'} />
           <Item ok title="Kho đã nhận" table="Pickup" detail={booking.receivedDate ? fmtDateTime(booking.receivedDate) : 'Đã chốt'} />
         </ul>
       </Card>
@@ -59,7 +61,7 @@ export default function PushedToCms({ booking, onView }: { booking: BookingDetai
       </Card>
 
       <p className="rounded-lg bg-primary-light px-3 py-2 text-[13px] text-primary">
-        Tiếp theo: kinh doanh mở vận đơn {booking.code} trong CMS, bổ sung người nhận rồi In bill.
+        Tiếp theo: kinh doanh mở vận đơn {booking.code} trong CMS, bổ sung người nhận rồi In bill. Dán shipping mark xong thì nhân viên cuối quét mã kiện ở màn &quot;Bước cuối&quot; để cân lại.
       </p>
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface p-3 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom))]">

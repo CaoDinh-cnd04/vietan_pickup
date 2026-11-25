@@ -10,7 +10,7 @@ public sealed record RowDto(long Id, string Code, long? CustomerId, string? Cust
     DateTime? CreateDate, int SoKienBook, int SoKienNhan, decimal? Kg, string? TenHang, long? OrderNumber, string SaleName);
 public sealed record DetailDto(long Id, string Code, long? CustomerId, string? CustomerName, string? CustomerPhone, string StaffName,
     string? ContactName, string? ContactPhone, string? PickupAddress, DateTime? PlanDate, string? TenHang, string? Note, int TrangThai, DateTime? CreateDate,
-    DateTime? ReceivedDate, int SoKienBook, decimal? KgDuKien, long? OrderNumber, IReadOnlyList<KienDto> Kiens, string SaleName);
+    DateTime? ReceivedDate, int SoKienBook, decimal? KgDuKien, long? OrderNumber, IReadOnlyList<KienDto> Kiens, string SaleName, long? FinishedPhotoId);
 
 /// <summary>
 /// Book pickup + kho nhận hàng trên BẢNG CRM (không bảng riêng):
@@ -100,13 +100,18 @@ public static class Bookings
                              join d in db.HinhAnhDatas.AsNoTracking() on h.Id equals d.Id
                              where h.MaVanDonId == id && h.ImageType == "DIM"
                              select h.Barcode).ToListAsync(ct)).ToHashSet();
+        var finished = await FinishedPhotoAsync(db, id, ct);
         bool HasPhoto(int k) => photos.Contains($"{Code(id)}_{k}") || (v.OrderNumber is > 0 && photos.Contains($"{v.OrderNumber}_{k}"));
         var kiens = dims.Select((d, i) => new KienDto(i + 1, d.Loai, d.Dai, d.Rong, d.Cao, d.TrongLuong, d.QuiDoi ?? 0, d.ChargeWeight ?? 0, HasPhoto(i + 1))).ToList();
         return Results.Ok(new DetailDto(v.Id, Code(v.Id), v.CustomerId, c?.CustomerName ?? v.CustomerName, c?.Phone ?? c?.Tel, Auth.StaffName(u),
             v.SenderContactName, v.SenderPhone, v.SenderAddress, v.PickupEst, v.TenHang, UserNote(id, p?.Note),
             StatusOf(v.OrderNumber, p?.PickDateEnd, dims.Count), p?.PickDate ?? v.CreateDate, p?.PickDateEnd,
-            p?.SoKienBook ?? v.SoKien ?? 0, dims.Count == 0 ? v.TrongLuong : null, v.OrderNumber, kiens, Auth.StaffName(sale)));
+            p?.SoKienBook ?? v.SoKien ?? 0, dims.Count == 0 ? v.TrongLuong : null, v.OrderNumber, kiens, Auth.StaffName(sale), finished?.Id));
     }
+
+    /// <summary>Ảnh hoàn thiện (gửi khách xem) của vận đơn: ImageType "Other", 1 tấm/đơn, có dữ liệu trong AHinhAnh_Order_Data.</summary>
+    private static Task<HinhAnh?> FinishedPhotoAsync(PickupDb db, long id, CancellationToken ct) =>
+        db.HinhAnhs.Where(h => h.MaVanDonId == id && h.ImageType == "Other" && db.HinhAnhDatas.Any(d => d.Id == h.Id)).OrderByDescending(h => h.Id).FirstOrDefaultAsync(ct);
 
     public static void Map(IEndpointRouteBuilder app)
     {
@@ -149,6 +154,7 @@ public static class Bookings
                 await db.SaveChangesAsync(ct);
                 db.Pickups.Add(new Pickup { StaffId = uid, CustomerId = r.CustomerId, SoKienBook = r.SoKien, SoKienNhan = 0, PickDate = now, Note = NoteOf(v.Id, r.Note) });
                 await db.SaveChangesAsync(ct);
+                await AppLog.WriteAsync(db, http, "tao-tai-kho", Code(v.Id), $"Tạo vận đơn {Code(v.Id)} cho khách {cust.CustomerName}", ct);
                 return true;
             }, ct);
             return Results.Created($"/api/pickup-bookings/{v.Id}", new { id = v.Id, code = Code(v.Id) });
@@ -197,7 +203,7 @@ public static class Bookings
         });
 
         // Huỷ: chỉ lệnh do app này tạo (có dòng Pickup), chưa nhận kiện, chưa in bill — xoá thật vận đơn nháp như CRM "Xóa vận đơn nháp".
-        g.MapPost("/{id:long}/cancel", async (long id, PickupDb db, CancellationToken ct) =>
+        g.MapPost("/{id:long}/cancel", async (long id, PickupDb db, HttpContext http, CancellationToken ct) =>
         {
             var v = await db.VanDons.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (v is null) return Missing();
@@ -212,6 +218,7 @@ public static class Bookings
                 db.Pickups.Remove(p);
                 db.VanDons.Remove(v);
                 await db.SaveChangesAsync(ct);
+                await AppLog.WriteAsync(db, http, "huy", Code(id), $"Huỷ lệnh {Code(id)} ({v.CustomerName})", ct);
                 return true;
             }, ct);
             return Results.Ok(new { id });
@@ -283,6 +290,9 @@ public static class Bookings
                 v.SoKien = p.PickDateEnd is not null ? count : Math.Max(p.SoKienBook ?? 0, count);
                 v.TrongLuong = kg; v.ModifyUser = staff; v.ModifyDate = now.Date;
                 await db.SaveChangesAsync(ct);
+                await AppLog.WriteAsync(db, req.HttpContext, "luu-kien", $"{Code(id)}_{kien}",
+                    $"Kiện {kien}: {dai}×{rong}×{cao} cm, {tl} kg, tính cước {Math.Max(tl, qd)} kg{(photo is not null ? ", có ảnh" : "")}", ct);
+                if (p.PickDateEnd == now) await AppLog.WriteAsync(db, req.HttpContext, "chot-nhan", Code(id), $"Tự chốt kho đã nhận {count} kiện, {kg} kg", ct);
                 return new { kienSo = kien, quiDoi = qd, chargeWeight = Math.Max(tl, qd), daNhan = count, daKhai = p.SoKienBook ?? 0, done = p.PickDateEnd is not null };
             }, ct);
             return Results.Ok(r);
@@ -303,6 +313,30 @@ public static class Bookings
             return Results.File(a.Data, a.ContentType);
         });
 
+        // Ảnh hoàn thiện (hàng đã đóng xong, gửi khách xem): ImageType "Other", barcode = mã đơn (B<ID> hoặc số bill, không có "_" ⇒
+        // màn Nhập kích thước legacy không liệt kê). 1 tấm/đơn — chụp lại thay dữ liệu.
+        g.MapPost("/{id:long}/finished-photo", async (long id, HttpRequest req, PickupDb db, TimeProvider clock, CancellationToken ct) =>
+        {
+            if (!req.HasFormContentType) return Bad("Cần gửi multipart/form-data.");
+            var (err, photo, type) = await Images.ReadPhotoAsync(await req.ReadFormAsync(ct), ct);
+            if (err is not null) return Bad(err);
+            if (photo is null) return Bad("Chưa chọn ảnh.");
+            var v = await db.VanDons.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
+            if (v is null) return Missing();
+            var now = clock.GetLocalNow().DateTime;
+            var barcode = v.OrderNumber is > 0 ? v.OrderNumber.Value.ToString() : Code(id);
+            var h = await FinishedPhotoAsync(db, id, ct);
+            var replaced = h is not null;
+            h = await InTx(db, async () =>
+            {
+                var r = await Images.PutAsync(db, h, barcode, "Other", id, photo, type!, now, ct);
+                await db.SaveChangesAsync(ct);
+                await AppLog.WriteAsync(db, req.HttpContext, "anh-hoan-thien", barcode, replaced ? $"Chụp lại ảnh hoàn thiện {barcode}" : $"Chụp ảnh hoàn thiện {barcode}", ct);
+                return r;
+            }, ct);
+            return Results.Ok(new { idHinh = h.Id });
+        }).DisableAntiforgery().WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(MaxPhotoBytes + 1024 * 1024));
+
         // Chốt "kho đã nhận" khi số kiện thực khác số khai (hoặc khách mang tới kho, không khai trước).
         g.MapPost("/{id:long}/receive", async (long id, HttpContext http, PickupDb db, TimeProvider clock, CancellationToken ct) =>
         {
@@ -316,7 +350,12 @@ public static class Bookings
             var now = clock.GetLocalNow().DateTime;
             p.PickDateEnd ??= now; p.StaffId = Auth.UserId(http); p.SoKienNhan = count;
             v.SoKien = count; v.ModifyDate = now.Date; v.ModifyUser = p.StaffId;
-            await db.SaveChangesAsync(ct);
+            await InTx(db, async () =>
+            {
+                await db.SaveChangesAsync(ct);
+                await AppLog.WriteAsync(db, http, "chot-nhan", Code(id), $"Bấm Xong: kho đã nhận {count} kiện", ct);
+                return true;
+            }, ct);
             return Results.Ok(new { id, trangThai = 2 });
         });
     }

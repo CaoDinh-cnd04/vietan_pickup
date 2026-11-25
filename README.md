@@ -9,7 +9,11 @@ App chỉ dành cho **kho**. Sale/CS tạo lệnh ở hệ khác (CRM); app đ�
 3. **Khách tự mang hàng tới kho**: *Nhận tại kho* → chọn khách → vào thẳng màn nhận kiện (không khai trước số kiện, bấm *Xong* để chốt).
 4. Nhận đủ số kiện khai (hoặc bấm *Xong*) ⇒ chốt "kho đã nhận" và đơn **biến mất** khỏi danh sách.
 5. **Kho quét mã** (`B<ID>`, `B<ID>/kiện` hoặc số bill 7 số) → vào **thẳng** màn nhận kiện. Mỗi kiện: **chụp ảnh → AI điền sẵn** dài/rộng/cao/cân/loại → người kho kiểm → Lưu. Quy đổi `D×R×C/5000` (làm tròn lên bước 0,5) và cân tính cước = max(cân thực, quy đổi) do server tính. Đủ số kiện khai thì tự chốt "kho đã nhận".
-6. **Kinh doanh** mở vận đơn nháp trong CRM (kích thước kiện, ảnh đã có sẵn), bổ sung người nhận rồi **In** — CRM cấp số bill và từ đó khoá sửa; app này cũng chỉ còn xem.
+6. **Ảnh hoàn thiện** (hàng đã đóng, gửi khách xem): 1 tấm/đơn ở màn nhận kiện / phiếu — `AHinhAnh_Order` loại `Other`, barcode = mã đơn (không `_` ⇒ màn Nhập kích thước legacy không liệt kê). Ảnh kiện (ảnh hàng, có số kho ghi tay) là loại `DIM`.
+7. **Kinh doanh** mở vận đơn nháp trong CRM (kích thước kiện, ảnh đã có sẵn), bổ sung người nhận rồi **In** — CRM cấp số bill và từ đó khoá sửa kiện kho; dán shipping mark lên thùng.
+8. **Bước cuối** (`/buoc-cuoi`, `api/Reweight.cs`): nhân viên cuối quét mã kiện trên shipping mark (`<số bill>/<kiện>`) → chụp ảnh → AI đọc số kho ghi tay → kiểm → **Lưu lên CMS** = ghi như màn "Nhập kích thước" của CMS (`p_VietAn_Reweight_Create`): ảnh `DIM` barcode `<số bill>_<kiện>` (1 tấm/kiện, chụp lại thay dữ liệu; ảnh kho `B<ID>_k` đổi mã sang số bill), `Order_VietAn_Reweight` theo `ID_Hinh` (có ⇒ cập nhật `Update_Date`), ảnh `Status_Nhap = 1`. Trigger `Order_VietAn_Reweight_Reweight_Tang` bật/hạ cờ `Over_ReWeight` trên `Orders`. Khác CRM: `UserID` = người lưu (CRM ghi 0).
+
+**Trang quản lý:** Vận đơn (mọi trạng thái) · Cân lại (so số kho đo với số cân lại, lọc lệch ≥ 0,5 kg) · Hình ảnh (lọc loại `DIM`/`Other`, đã cân lại) · Nhật ký (ai làm gì, lúc mấy giờ).
 
 Trạng thái (suy ra, không lưu): Chờ lấy (chưa kiện nào) · Đang nhận · Kho đã nhận (`Pickup.Pick_Date_End`) · Đã lập bill (`MaVanDon.OrderNumber`).
 
@@ -20,6 +24,8 @@ Trạng thái (suy ra, không lưu): Chờ lấy (chưa kiện nào) · Đang nh
 | `MaVanDon_PCS_DIM` | 1 dòng / kiện; **kiện k = dòng thứ k theo ID** (quy ước `p_MVD_Get_PCS_DIM`). Trigger CRM `MaVanDon_PCS_DIM_Create_DIM` tự cập nhật `Order_MaVanDon_MNF.DIM`. |
 | `Pickup` | 1 dòng / lệnh, liên kết bằng `Note = "B<ID>"` (hoặc `"B<ID> - ghi chú"`). `Total_So_kien_Bill` = số khai, `Total_So_kien_Nhan`/`Total_So_Kg` = thực nhận, `Pick_Date_End` = lúc chốt. `Trang_Thai` luôn 1 để màn quét hệ cũ (`p_Prickup_Get_Last` tìm phiên `Trang_Thai=0`) không nối kiện bill khác vào. **Không ghi `PickupDetail`** (cột số bill bắt buộc — chưa có lúc nhận). |
 | `AHinhAnh_Order` + `AHinhAnh_Order_Data` | Ảnh kiện: Barcode `B<ID>_<kiện>`, ImageType `DIM`, `MaVanDon_ID`, 1 ảnh/kiện (chụp lại = thay dữ liệu). CRM đổi sang `<số bill>_<kiện>` khi in bill. |
+| `Order_VietAn_Reweight` | Bước cuối: 1 dòng / ảnh kiện (`ID_Hinh`) — dài/rộng/cao/cân/quy đổi/cân tính cước. Ghi bằng SQL (bảng có trigger). |
+| `TLogs` | **Ghi tạm** nhật ký thao tác (`api/AppLog.cs`): `F10 = "PICKUP:<thao tác>"`, `F11 = "<user id>\|<tên>"`, `F12 = mã`, `LogContent` = mô tả. Chưa có bảng riêng — kiểm tra lại rồi chỉnh. |
 | `TCustomer`, `USERS`, `TBaseCode` | Chỉ ĐỌC (khách, đăng nhập, khung giờ chặn). |
 
 4 bảng `Pickup_Booking*` của bản trước không còn dùng — dọn trên DB local bằng `db/drop_pickup_booking_old.sql` (chạy tay, sau khi backup).

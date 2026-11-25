@@ -7,10 +7,12 @@ import { ArrowLeft, PackageCheck, Printer, XCircle } from 'lucide-react'
 import { Card, ErrorBox } from '@/shared/kit/Page'
 import { Btn } from '@/shared/kit/Fields'
 import { useAction, useApi } from '@/shared/lib/hooks'
+import { clientFetch } from '@/shared/lib/api'
 import { fmtDateTime } from '@/shared/lib/format'
 import { BookingStatus, type BookingDetail } from './bookingShared'
 import ReceiveWorkspace from './ReceiveWorkspace'
 import PushedToCms from './PushedToCms'
+import FinishedPhoto from './FinishedPhoto'
 
 /** QR chỉ chứa MÃ (B914700): tên khách/nhân viên tra từ DB khi quét, không nhúng thông tin cá nhân vào mã. */
 function useQr(code: string | undefined) {
@@ -61,6 +63,7 @@ export default function BookingDetailPage() {
           </div>
           <button type="button" onClick={() => { setReceiving(false); reload() }} className="h-11 shrink-0 rounded-lg px-2 text-[13px] text-primary">Xem phiếu</button>
         </div>
+        <div className="mb-3"><FinishedPhoto bookingId={data.id} photoId={data.finishedPhotoId} onUploaded={async () => setFresh(await clientFetch<BookingDetail>(`/api/pickup-bookings/${id}`))} /></div>
         <ReceiveWorkspace booking={data} onChange={setFresh} onDone={() => { setReceiving(false); setPushed(true) }} />
       </div>
     )
@@ -116,6 +119,7 @@ export default function BookingDetailPage() {
         {locked && <p className="mt-3 text-[12.5px] text-text-muted print:hidden">Bill đã in bên CRM — không sửa kiện ở đây nữa.</p>}
       </Card>
 
+      <div className="mt-3"><FinishedPhoto bookingId={data.id} photoId={data.finishedPhotoId} onUploaded={async () => setFresh(await clientFetch<BookingDetail>(`/api/pickup-bookings/${id}`))} /></div>
       {error && <div className="mt-3 print:hidden"><ErrorBox message={error} /></div>}
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface p-3 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom))] print:hidden">

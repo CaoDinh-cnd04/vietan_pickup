@@ -80,6 +80,7 @@ public static class Pickups
                     ? await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Pickup SET Note = {note} WHERE Pickup_ID = {pickupId} AND Note IS NULL AND Pick_Date_End IS NULL", ct)
                     : await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Pickup SET Note = {note} WHERE Pickup_ID = {pickupId} AND Note = {p.Note} AND Pick_Date_End IS NULL", ct);
                 if (n == 0) return false;   // dispose không commit ⇒ rollback vận đơn vừa thêm
+                await AppLog.WriteAsync(db, http, "bat-dau-pickup", Bookings.Code(v.Id), $"Lệnh Pickup #{pickupId} → vận đơn {Bookings.Code(v.Id)} ({cust.CustomerName})", ct);
                 await tx.CommitAsync(ct);
                 return true;
             });

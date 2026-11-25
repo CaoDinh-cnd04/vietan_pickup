@@ -72,6 +72,7 @@ public class HinhAnh
     public DateTime? CreateDate { get; set; }
     public string? ImageType { get; set; }
     public long? MaVanDonId { get; set; }
+    public int? StatusNhap { get; set; }   // 1 = đã nhập kích thước (Order_VietAn_Reweight)
 }
 
 /// <summary>Nhị phân ảnh (ADR-051) — bảng riêng để SELECT AHinhAnh_Order không kéo nhị phân.</summary>
@@ -84,6 +85,17 @@ public class HinhAnhData
 }
 
 // ---- CRM — CHỈ ĐỌC ---------------------------------------------------------------------------------------------------------------------------
+
+/// <summary>Bảng log legacy TLogs — app ghi tạm nhật ký thao tác (F10 = "PICKUP:<thao tác>", F11 = "<user id>|<tên>", F12 = mã đơn/kiện).</summary>
+public class TLog
+{
+    public long Id { get; set; }
+    public DateTime LogDate { get; set; }
+    public string LogContent { get; set; } = "";
+    public string? F10 { get; set; }
+    public string? F11 { get; set; }
+    public string? F12 { get; set; }
+}
 
 public class Customer
 {
@@ -127,6 +139,7 @@ public class PickupDb(DbContextOptions<PickupDb> options) : DbContext(options)
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<User> Users => Set<User>();
     public DbSet<BaseCode> BaseCodes => Set<BaseCode>();
+    public DbSet<TLog> Logs => Set<TLog>();
 
     protected override void OnModelCreating(ModelBuilder m)
     {
@@ -187,6 +200,13 @@ public class PickupDb(DbContextOptions<PickupDb> options) : DbContext(options)
             b.Property(e => e.CreateDate).HasColumnName("Create_Date");
             b.Property(e => e.ImageType).HasMaxLength(20);
             b.Property(e => e.MaVanDonId).HasColumnName("MaVanDon_ID");
+            b.Property(e => e.StatusNhap).HasColumnName("Status_Nhap");
+        });
+        m.Entity<TLog>(b =>
+        {
+            b.ToTable("TLogs");
+            b.HasKey(e => e.Id);
+            b.Property(e => e.Id).HasColumnName("LogID").ValueGeneratedOnAdd();
         });
         m.Entity<HinhAnhData>(b =>
         {

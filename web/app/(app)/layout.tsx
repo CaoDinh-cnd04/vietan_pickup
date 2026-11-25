@@ -12,14 +12,19 @@ function readName(): string {
   } catch { return '' }
 }
 
-/** Menu của app (chỉ cho kho). Trang phiếu, nhận tại kho (mở từ nút "Nhận hàng") thuộc "Hàng về kho". */
+/** Menu: việc hằng ngày của kho trước, trang quản lý sau. Trang phiếu `/[id]`, nhận tại kho `/new` thuộc "Hàng về kho". */
 const NAV = [
   { href: '/', label: 'Hàng về kho' },
+  { href: '/buoc-cuoi', label: 'Bước cuối' },
+  { href: '/van-don', label: 'Vận đơn' },
+  { href: '/can-lai', label: 'Cân lại' },
   { href: '/hinh-anh', label: 'Hình ảnh' },
+  { href: '/nhat-ky', label: 'Nhật ký' },
 ] as const
 
 function MainNav() {
-  const current = usePathname().startsWith('/hinh-anh') ? '/hinh-anh' : '/'
+  const pathname = usePathname()
+  const current = NAV.find((n) => n.href !== '/' && pathname.startsWith(n.href))?.href ?? '/'
   return (
     <ul className="flex min-w-0 items-center gap-px overflow-x-auto">
       {NAV.map((n) => (
