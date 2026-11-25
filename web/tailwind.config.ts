@@ -12,21 +12,24 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#2563eb',
-          dark: '#1d4ed8',
-          light: '#eff6ff',
-          border: '#bfdbfe',
+          DEFAULT: '#3b6ea8',
+          dark: '#2c5282',
+          light: '#ebf2fa',
+          border: '#d3e0ef',
         },
         surface: '#ffffff',
-        background: '#f8fafc',
+        background: '#f3f4f6',
+        // khung giống CMS: dải tài khoản + thanh menu
+        utility: { DEFAULT: '#11151d', muted: '#b8c0cc' },
+        nav: { DEFAULT: '#1a202c', muted: '#c9d0da' },
         border: {
-          DEFAULT: '#e2e8f0',
-          light: '#f1f5f9',
+          DEFAULT: '#d9dde4',
+          light: '#eceef2',
         },
         text: {
-          primary: '#0f172a',
-          secondary: '#374151',
-          muted: '#64748b',
+          primary: '#1a202c',
+          secondary: '#3f4a5a',
+          muted: '#5b6678',
           disabled: '#94a3b8',
           subtle: '#9ca3af',
         },
@@ -41,7 +44,8 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ['Montserrat','system-ui', 'sans-serif'],
+        sans: ['Be Vietnam Pro', 'system-ui', 'sans-serif'],
+        nav: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
         card: '12px',
@@ -53,7 +57,7 @@ const config: Config = {
       boxShadow: {
         card: '0 1px 3px rgba(0,0,0,0.06), 0 4px 14px rgba(0,0,0,0.05)',
         'card-sm': '0 1px 3px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.04)',
-        btn: '0 2px 8px rgba(37,99,235,0.3)',
+        btn: '0 2px 8px rgba(59,110,168,0.3)',
       },
     },
   },
